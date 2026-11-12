@@ -36,9 +36,8 @@ function Sofa({ x, z, w, dir, color }: { x: number; z: number; w: number; dir: 1
   );
 }
 
-/** Lounge: two sofas around a low table, coffee bar, ping-pong table, lounge pods, plants. */
+/** Lounge: two sofas around a low table, coffee bar, ping-pong table, lounge pods (plants live in Decor). */
 export default function Lounge() {
-  const plants = useMemo<[number, number][]>(() => [[31, 28], [42, 28], [31, 17], [36, 21]], []);
   const podSpots = useMemo(() => OFFICE.loungeSpots.filter((s) => s.style === 'chat').map((s) => s.cell), []);
   const podCenter = useMemo(() => {
     const xs = podSpots.map((c) => c.x), zs = podSpots.map((c) => c.z);
@@ -126,23 +125,6 @@ export default function Lounge() {
           </mesh>
         </group>
       )}
-
-      {/* Plants */}
-      {plants.map(([x, z]) => {
-        const [px, , pz] = cellToWorld({ x, z });
-        return (
-          <group key={`${x}-${z}`} position={[px, 0, pz]}>
-            <mesh position={[0, 0.25, 0]}>
-              <cylinderGeometry args={[0.22, 0.17, 0.5, 14]} />
-              <meshStandardMaterial color="#f8fafc" roughness={0.3} />
-            </mesh>
-            <mesh position={[0, 0.85, 0]} castShadow>
-              <icosahedronGeometry args={[0.42, 0]} />
-              <meshStandardMaterial color="#22c55e" roughness={0.8} flatShading />
-            </mesh>
-          </group>
-        );
-      })}
 
       {/* Warm lounge fill */}
       <pointLight position={rc(31, 17, 11, 12, 3)} color="#fde68a" intensity={1.5} distance={14} decay={1.6} />

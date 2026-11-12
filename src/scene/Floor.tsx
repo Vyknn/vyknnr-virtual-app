@@ -55,6 +55,7 @@ export default function Floor() {
       w.from.z === 0 && w.to.z === 0 || w.from.z === OFFICE.depth - 1 && w.to.z === OFFICE.depth - 1 ||
       w.from.x === 0 && w.to.x === 0 || w.from.x === OFFICE.width - 1 && w.to.x === OFFICE.width - 1;
     for (const w of OFFICE.walls) {
+      if (w.low) continue; // department partitions are drawn by Rooms
       if (w.glass) {
         const b = segBox(w, GLASS_H);
         glass.push(b);

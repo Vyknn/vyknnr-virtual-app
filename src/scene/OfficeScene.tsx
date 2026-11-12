@@ -17,6 +17,8 @@ import Zones from './Zones';
 import Desks from './Desks';
 import ServerRoom from './ServerRoom';
 import Lounge from './Lounge';
+import Rooms from './Rooms';
+import Decor from './Decor';
 import AICore from './AICore';
 import Agents from './AgentAvatar';
 import Effects from './Effects';
@@ -106,6 +108,8 @@ export default function OfficeScene({ children }: OfficeSceneProps) {
         <Desks />
         <ServerRoom />
         <Lounge />
+        <Rooms />
+        <Decor />
         <AICore />
         <Agents />
         <Effects />
