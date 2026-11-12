@@ -74,6 +74,33 @@ describe('planner', () => {
   });
 });
 
+describe('planner fixes', () => {
+  it('ASCII word boundaries', () => {
+    expect(makePlan('build API login').intent).toBe('feature_backend');
+    expect(makePlan('latest uploads').intent).toBeNull();
+    expect(makePlan('ทำapi loginให้เกม').intent).toBe('feature_backend');
+  });
+  it('multi-dept combined plan', () => {
+    const p = makePlan('ทำ API login และโลโก้');
+    expect(p.intent).toBe('feature_backend');
+    const w = p.nodes.find((n) => n.skill === 'write_code')!;
+    const l = p.nodes.find((n) => n.skill === 'make_logo')!;
+    expect(w.dependsOn).toEqual([]);
+    expect(l.dependsOn).toEqual([]);
+    expect(p.nodes.find((n) => n.skill === 'run_tests')!.dependsOn).toEqual([w.key]);
+  });
+  it('mobile_app branch', () => {
+    const p = makePlan('ทำแอป android');
+    expect(p.intent).toBe('mobile_app');
+    expect(p.nodes.map((n) => n.skill)).toEqual(['breakdown_requirements', 'android_app', 'run_tests']);
+  });
+  it('strategy pick', () => {
+    const p = makePlan('ขอ roadmap');
+    expect(p.intent).toBe('strategy');
+    expect(p.nodes.map((n) => n.skill)).toEqual(['strategy']);
+  });
+});
+
 describe('pickAssignee', () => {
   it('queues on sole owner', () => {
     expect(pickAssignee('engine_optimize', 'optimize fps', agents())).toBe('ploy');

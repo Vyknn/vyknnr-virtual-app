@@ -28,11 +28,21 @@ const DEPT_KEYWORDS: Record<DeptId, Map<string, number>> = (() => {
 
 const norm = (t: string) => t.toLowerCase().trim();
 
+// ASCII keywords match on word boundaries (Thai chars count as boundaries); Thai keywords match as substrings.
+const ASCII_KW = /^[a-z0-9 ]+$/;
+const BOUND_CACHE = new Map<string, RegExp>();
+function has(t: string, kw: string): boolean {
+  if (!ASCII_KW.test(kw)) return t.includes(kw);
+  let re = BOUND_CACHE.get(kw);
+  if (!re) { re = new RegExp(`(?<![a-z0-9])${kw}(?![a-z0-9])`); BOUND_CACHE.set(kw, re); }
+  return re.test(t);
+}
+
 export function scoreDepartments(text: string): Record<DeptId, number> {
   const t = norm(text);
   const res = Object.fromEntries(ALL_DEPTS.map((d) => [d, 0])) as Record<DeptId, number>;
   if (!t) return res;
-  for (const d of ALL_DEPTS) for (const [kw, w] of DEPT_KEYWORDS[d]) if (t.includes(kw)) res[d] += w;
+  for (const d of ALL_DEPTS) for (const [kw, w] of DEPT_KEYWORDS[d]) if (has(t, kw)) res[d] += w;
   return res;
 }
 
@@ -59,7 +69,7 @@ const DEPT_INTENTS: Record<DeptId, { when?: string[]; def: IntentDef }[]> = {
   ] } }],
   backend: [
     { when: ['api', 'login', 'auth', 'database', 'db'], def: { intent: 'feature_backend', withTests: true, fallback: 'write_code',
-      picks: [{ match: ['migrat'], skill: 'run_migration' }] } },
+      picks: [{ match: ['migration', 'migrate', 'ย้ายข้อมูล'], skill: 'run_migration' }] } },
     { def: { intent: 'infra', withTests: false, fallback: 'provision_server', picks: [{ match: ['deploy'], skill: 'deploy' }] } },
   ],
   mobile: [{ def: { intent: 'mobile_app', withTests: true, fallback: 'ios_app', picks: [
@@ -102,22 +112,22 @@ const NEW_GAME_NODES: PlanDraftNode[] = [
   node('approve', 'approve', ['launch']),
 ];
 
-function singleDept(text: string): DeptId | null {
+// strong depts (score >= 3), highest score first, ties in declaration order
+function strongDepts(text: string): DeptId[] {
   const s = scoreDepartments(text);
-  const strong = ALL_DEPTS.filter((d) => s[d] >= 3);
-  return strong.length === 1 ? strong[0] : null;
+  return ALL_DEPTS.filter((d) => s[d] >= 3).sort((a, b) => s[b] - s[a]);
 }
 
 function resolveDef(dept: DeptId, t: string): IntentDef {
   const rules = DEPT_INTENTS[dept];
-  return (rules.find((r) => !r.when || r.when.some((w) => t.includes(w))) ?? rules[rules.length - 1]).def;
+  return (rules.find((r) => !r.when || r.when.some((w) => has(t, w))) ?? rules[rules.length - 1]).def;
 }
 
 export function detectIntent(text: string): Intent | null {
   const t = norm(text);
   if (!t) return null;
-  if (NEW_GAME_TRIGGERS.some((k) => t.includes(k))) return 'new_game';
-  const d = singleDept(t);
+  if (NEW_GAME_TRIGGERS.some((k) => has(t, k))) return 'new_game';
+  const d = strongDepts(t)[0];
   return d ? resolveDef(d, t).intent : null;
 }
 
@@ -128,17 +138,28 @@ function leaves(nodes: PlanDraftNode[]): string[] {
 
 function buildNodes(intent: Intent, t: string): PlanDraftNode[] {
   if (intent === 'new_game') return NEW_GAME_NODES.map((n) => ({ ...n, dependsOn: [...n.dependsOn] }));
-  const d = singleDept(t)!;
-  const def = resolveDef(d, t);
+  const strong = strongDepts(t);
+  const def = resolveDef(strong[0], t);
+  const primary = (df: IntentDef) => df.picks.find((p) => p.match.some((k) => has(t, k)))?.skill ?? df.fallback;
   let nodes: PlanDraftNode[];
+  if (strong.length > 1) {
+    const defs = strong.map((d) => resolveDef(d, t));
+    const skills = [...new Set(defs.map(primary))];
+    nodes = skills.map((sk) => node(sk, sk));
+    if (defs.some((df) => df.withTests)) {
+      const devKeys = [...new Set(defs.filter((df) => df.withTests).map(primary))].filter((k) => k !== 'run_tests');
+      if (!nodes.some((n) => n.skill === 'run_tests')) nodes.push(node('tests', 'run_tests', devKeys));
+    }
+    return nodes;
+  }
   if (intent === 'mobile_app') {
-    const ios = ['ios', 'swift', 'iphone'].some((k) => t.includes(k));
-    const and = ['android', 'flutter'].some((k) => t.includes(k));
+    const ios = ['ios', 'swift', 'iphone'].some((k) => has(t, k));
+    const and = ['android', 'flutter'].some((k) => has(t, k));
     nodes = [node('brief', 'breakdown_requirements')];
     if (ios || !and) nodes.push(node('ios', 'ios_app', ['brief']));
     if (and || !ios) nodes.push(node('android', 'android_app', ['brief']));
   } else {
-    const skill = def.picks.find((p) => p.match.some((k) => t.includes(k)))?.skill ?? def.fallback;
+    const skill = primary(def);
     nodes = [node(skill, skill)];
   }
   if (def.withTests) nodes.push(node('tests', 'run_tests', leaves(nodes)));
@@ -171,7 +192,7 @@ export function pickAssignee(skill: SkillId, text: string, agents: Record<string
   const owners = SKILL_OWNERS[skill];
   if (!owners || owners.length === 0) throw new Error(`No owner for skill: ${skill}`);
   const t = norm(text);
-  const kwScore = (id: string) => ROSTER.find((a) => a.id === id)!.keywords.filter((k) => t.includes(k.toLowerCase())).length;
+  const kwScore = (id: string) => ROSTER.find((a) => a.id === id)!.keywords.filter((k) => has(t, k.toLowerCase())).length;
   const isIdle = (id: string) => agents[id]?.state === 'idle';
   const best = owners.reduce((b, id) => (kwScore(id) > kwScore(b) ? id : b), owners[0]);
   if (kwScore(best) > 0 && isIdle(best)) return best;
