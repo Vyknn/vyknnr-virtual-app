@@ -70,7 +70,7 @@ export default function AgentTelemetry({ className = '' }: { className?: string 
       <div className="flex items-baseline gap-2 px-3.5 pb-1.5 pt-3">
         <span className="text-sm font-semibold text-slate-900">Agent Telemetry</span>
         <span className="text-[10px] text-slate-400">สถานะรายคน</span>
-        <span className={`${label} ml-auto normal-case`}>click = focus</span>
+        <span className={`${label} ml-auto hidden normal-case 2xl:inline`}>click = focus</span>
       </div>
       <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2.5 pb-2.5">
         {rows.map((r) => <AgentRow key={r.id} r={r} selected={selected === r.id} />)}
