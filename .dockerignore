@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.gitignore
+.vitest
+.superpowers
+coverage
+tests
+docs
+*.log
+*.md
+image.png
+tsconfig.tsbuildinfo
+Dockerfile
+.dockerignore
+cloudbuild.yaml
+.env*.local
