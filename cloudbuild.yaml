@@ -1,0 +1,44 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args:
+      [
+        "-c",
+        "docker pull gcr.io/$PROJECT_ID/vyknnr-virutal-app:latest || exit 0",
+      ]
+  #step 2
+  - name: gcr.io/cloud-builders/docker
+    args:
+      [
+        "build",
+        "--build-arg",
+        "BUILD=$SHORT_SHA",
+        "-t",
+        "asia.gcr.io/$PROJECT_ID/vyknnr-virutal-app:$SHORT_SHA",
+        "-t",
+        "asia.gcr.io/$PROJECT_ID/vyknnr-virutal-app:latest",
+        ".",
+      ]
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "asia.gcr.io/$PROJECT_ID/vyknnr-virutal-app:$SHORT_SHA"]
+  #step 3
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "vyknnr-virutal-app"
+      - "--image"
+      - "asia.gcr.io/$PROJECT_ID/vyknnr-virutal-app:$SHORT_SHA"
+      - "--region"
+      - "asia-southeast3"
+      - "--allow-unauthenticated"
+# push images to Google Container Registry with tags
+images:
+  [
+    "asia.gcr.io/$PROJECT_ID/vyknnr-virutal-app:$SHORT_SHA",
+    "asia.gcr.io/$PROJECT_ID/vyknnr-virutal-app:latest",
+  ]
+options:
+  # machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
