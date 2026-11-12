@@ -22,7 +22,7 @@ export function listEq<T>(a: readonly T[], b: readonly T[]): boolean {
  * The selector may close over props; a new selector is picked up on the next poll (key the component
  * on the prop when a stale frame is unacceptable). `T` must not be a function.
  */
-export function useThrottledSelector<T>(selector: (s: OfficeStore) => T, eq: Eq<T> = shallow, hz = 5): T {
+export function useThrottledSelector<T>(selector: (s: OfficeStore) => T, eq: Eq<T> = shallow, hz = 5, enabled = true): T {
   const selRef = useRef(selector);
   const eqRef = useRef(eq);
   useEffect(() => {
@@ -31,12 +31,15 @@ export function useThrottledSelector<T>(selector: (s: OfficeStore) => T, eq: Eq<
   });
   const [value, setValue] = useState<T>(() => selector(useOfficeStore.getState()));
   useEffect(() => {
-    const id = window.setInterval(() => {
+    if (!enabled) return;
+    const tick = () => {
       const next = selRef.current(useOfficeStore.getState());
       setValue((prev) => (eqRef.current(prev, next) ? prev : next));
-    }, 1000 / hz);
+    };
+    tick();
+    const id = window.setInterval(tick, 1000 / hz);
     return () => window.clearInterval(id);
-  }, [hz]);
+  }, [hz, enabled]);
   return value;
 }
 

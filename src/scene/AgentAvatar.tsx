@@ -162,6 +162,7 @@ function AgentAvatar({ def }: { def: AgentDef }) {
     lastNode: '' as string,
     lastText: '',
     lastColor: '',
+    lastSelected: false,
     lastShow: false,
     lastPct: -1,
   });
@@ -287,8 +288,12 @@ function AgentAvatar({ def }: { def: AgentDef }) {
     if (color !== m.lastColor) {
       if (dot.current) { dot.current.style.background = color; dot.current.style.boxShadow = `0 0 6px ${color}`; }
       if (bar.current) bar.current.style.background = color;
-      if (pill.current) pill.current.style.borderColor = selected ? color : 'rgba(255,255,255,0.18)';
       m.lastColor = color;
+      m.lastSelected = !selected; // force border refresh below
+    }
+    if (selected !== m.lastSelected) {
+      if (pill.current) pill.current.style.borderColor = selected ? color : 'rgba(255,255,255,0.18)';
+      m.lastSelected = selected;
     }
     if (pct !== m.lastPct && bar.current) { bar.current.style.width = `${Math.max(0, pct)}%`; m.lastPct = pct; }
   });
@@ -312,14 +317,14 @@ function AgentAvatar({ def }: { def: AgentDef }) {
 
   const leg = (hip: RefObject<THREE.Group | null>, knee: RefObject<THREE.Group | null>, x: number) => (
     <group ref={hip} position={[x, HIP_Y, 0]}>
-      <mesh geometry={BOX} position={[0, -THIGH / 2, 0]} scale={[0.13, THIGH, 0.14]} castShadow>
+      <mesh geometry={BOX} dispose={null} position={[0, -THIGH / 2, 0]} scale={[0.13, THIGH, 0.14]} castShadow>
         <meshStandardMaterial color={PANTS} roughness={0.75} />
       </mesh>
       <group ref={knee} position={[0, -THIGH, 0]}>
-        <mesh geometry={BOX} position={[0, -SHIN / 2, 0]} scale={[0.12, SHIN, 0.13]}>
+        <mesh geometry={BOX} dispose={null} position={[0, -SHIN / 2, 0]} scale={[0.12, SHIN, 0.13]}>
           <meshStandardMaterial color={PANTS} roughness={0.75} />
         </mesh>
-        <mesh geometry={BOX} position={[0, -SHIN - 0.03, 0.04]} scale={[0.13, 0.07, 0.22]}>
+        <mesh geometry={BOX} dispose={null} position={[0, -SHIN - 0.03, 0.04]} scale={[0.13, 0.07, 0.22]}>
           <meshStandardMaterial color={SHOES} roughness={0.5} />
         </mesh>
       </group>
@@ -327,14 +332,14 @@ function AgentAvatar({ def }: { def: AgentDef }) {
   );
   const arm = (ref: RefObject<THREE.Group | null>, x: number, withCup: boolean) => (
     <group ref={ref} position={[x, SHOULDER_Y, 0]}>
-      <mesh geometry={BOX} position={[0, -ARM / 2, 0]} scale={[0.1, ARM, 0.11]}>
+      <mesh geometry={BOX} dispose={null} position={[0, -ARM / 2, 0]} scale={[0.1, ARM, 0.11]}>
         <meshStandardMaterial color={look.shirt} roughness={0.7} />
       </mesh>
-      <mesh geometry={BOX} position={[0, -ARM - 0.04, 0]} scale={[0.09, 0.09, 0.09]}>
+      <mesh geometry={BOX} dispose={null} position={[0, -ARM - 0.04, 0]} scale={[0.09, 0.09, 0.09]}>
         <meshStandardMaterial color={look.skin} roughness={0.6} />
       </mesh>
       {withCup && (
-        <mesh ref={cup} geometry={CUP} position={[0, -ARM - 0.05, 0.07]} visible={false}>
+        <mesh ref={cup} geometry={CUP} dispose={null} position={[0, -ARM - 0.05, 0.07]} visible={false}>
           <meshStandardMaterial color="#f8fafc" roughness={0.35} />
         </mesh>
       )}
@@ -346,25 +351,25 @@ function AgentAvatar({ def }: { def: AgentDef }) {
       <group ref={body}>
         {leg(hipL, kneeL, -0.1)}
         {leg(hipR, kneeR, 0.1)}
-        <mesh geometry={TORSO} position={[0, 1.08, 0]} scale={[1, 1, 0.78]} castShadow>
+        <mesh geometry={TORSO} dispose={null} position={[0, 1.08, 0]} scale={[1, 1, 0.78]} castShadow>
           <meshStandardMaterial color={look.shirt} roughness={0.7} />
         </mesh>
         {arm(shL, -0.255, false)}
         {arm(shR, 0.255, true)}
         <group ref={head} position={[0, 1.57, 0]}>
-          <mesh geometry={HEAD} castShadow>
+          <mesh geometry={HEAD} dispose={null} castShadow>
             <meshStandardMaterial color={look.skin} roughness={0.6} />
           </mesh>
-          <mesh geometry={HAIR_CAP} rotation={[-0.25, 0, 0]} scale={look.style === 'buzz' ? 0.96 : 1}>
+          <mesh geometry={HAIR_CAP} dispose={null} rotation={[-0.25, 0, 0]} scale={look.style === 'buzz' ? 0.96 : 1}>
             <meshStandardMaterial color={look.hair} roughness={0.8} />
           </mesh>
           {look.style === 'long' && (
-            <mesh geometry={BOX} position={[0, -0.1, -0.1]} scale={[0.3, 0.3, 0.1]}>
+            <mesh geometry={BOX} dispose={null} position={[0, -0.1, -0.1]} scale={[0.3, 0.3, 0.1]}>
               <meshStandardMaterial color={look.hair} roughness={0.8} />
             </mesh>
           )}
           {look.style === 'bun' && (
-            <mesh geometry={BUN} position={[0, 0.12, -0.12]}>
+            <mesh geometry={BUN} dispose={null} position={[0, 0.12, -0.12]}>
               <meshStandardMaterial color={look.hair} roughness={0.8} />
             </mesh>
           )}
@@ -398,7 +403,7 @@ function SelectionRing() {
     m.scale.setScalar(1 + Math.sin(state.clock.elapsedTime * 4) * 0.06);
   });
   return (
-    <mesh ref={mesh} geometry={RING} rotation={[-Math.PI / 2, 0, 0]} visible={false} renderOrder={2}>
+    <mesh ref={mesh} geometry={RING} dispose={null} rotation={[-Math.PI / 2, 0, 0]} visible={false} renderOrder={2}>
       <meshBasicMaterial color={RING_COLOR} toneMapped={false} transparent opacity={0.95} depthWrite={false} side={THREE.DoubleSide} />
     </mesh>
   );

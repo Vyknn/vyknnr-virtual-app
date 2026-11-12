@@ -24,6 +24,7 @@ function Search() {
     (s) => Object.values(s.sim.nodes).map((n) => ({ id: n.id, title: n.title, jobId: n.jobId, assigneeId: n.assigneeId })),
     listEq,
     2,
+    open || q.trim() !== '',
   );
   const hits = useMemo<Hit[]>(() => {
     const t = q.trim().toLowerCase();
@@ -54,7 +55,7 @@ function Search() {
         onFocus={() => setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && hits[0]) pick(hits[0]);
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing && hits[0]) pick(hits[0]);
           if (e.key === 'Escape') { setQ(''); setOpen(false); }
         }}
         placeholder="ค้นหา agent, task… (เช่น Nara, T-1003)"

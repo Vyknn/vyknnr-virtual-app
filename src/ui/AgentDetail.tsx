@@ -53,7 +53,7 @@ function StepLog({ agentId }: { agentId: string }) {
   return (
     <div ref={ref} className="mt-2 max-h-36 overflow-y-auto rounded-lg bg-slate-900 px-2.5 py-2 font-mono text-[10.5px] leading-relaxed">
       {lines.length === 0 ? (
-        <div className="text-slate-500">$ waiting for task…</div>
+        <div className="text-slate-500">$ รองานอยู่…</div>
       ) : (
         lines.map((l, i) => {
           const c = STEP_CLS[l.kind];
@@ -98,7 +98,7 @@ function Detail({ agentId }: { agentId: string }) {
 
       <div className="mt-3 rounded-xl border border-slate-200/70 bg-white/60 p-2.5">
         <div className="flex items-center justify-between">
-          <span className={label}>Current task</span>
+          <span className={label}>งานปัจจุบัน</span>
           {live.nodeId && <span className="font-mono text-[10px] text-slate-400">{live.nodeId} · {live.jobId}</span>}
         </div>
         {live.nodeId ? (
@@ -111,18 +111,18 @@ function Detail({ agentId }: { agentId: string }) {
               <span className="font-mono text-[10px] tabular-nums text-slate-500">{live.progress}%</span>
             </div>
             <div className="mt-0.5 font-mono text-[10px] text-slate-400">
-              step {Math.min(live.stepIndex + 1, live.stepCount)}/{live.stepCount}
-              {live.queue > 0 && ` · +${live.queue} queued`}
+              ขั้นที่ {Math.min(live.stepIndex + 1, live.stepCount)}/{live.stepCount}
+              {live.queue > 0 && ` · +${live.queue} ในคิว`}
             </div>
           </>
         ) : (
-          <div className="mt-1 text-xs text-slate-500">ไม่มีงานในมือ · done today {live.doneToday}</div>
+          <div className="mt-1 text-xs text-slate-500">ไม่มีงานในมือ · เสร็จวันนี้ {live.doneToday}</div>
         )}
         <StepLog agentId={agentId} />
       </div>
 
       <div className="mt-3 flex gap-2">
-        <button type="button" className={`${btnPrimary} flex-1`} onClick={() => focusAgent(agentId)}>Locate</button>
+        <button type="button" className={`${btnPrimary} flex-1`} onClick={() => focusAgent(agentId)}>โฟกัส</button>
         <button type="button" className={btn} onClick={() => useOfficeStore.getState().select(null)}>ปิด</button>
       </div>
     </div>
@@ -138,7 +138,7 @@ export default function AgentDetail() {
         <Detail key={id} agentId={id} />
       ) : (
         <div className="p-3.5">
-          <div className={label}>Agent detail</div>
+          <div className={label}>รายละเอียด Agent</div>
           <p className="mt-1 text-xs text-slate-500">คลิก agent ในฉาก หรือในรายการ Telemetry เพื่อดูรายละเอียด</p>
           <div className={`${chip} mt-2`}>Q / E หมุนกล้อง · ลากเพื่อ pan · scroll เพื่อ zoom</div>
         </div>

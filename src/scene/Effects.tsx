@@ -92,16 +92,16 @@ function Beam({ fx }: { fx: Fx }) {
 
   return (
     <group>
-      <mesh ref={core} geometry={CYL} quaternion={geo.quat} position={geo.mid} visible={false} renderOrder={3}>
+      <mesh ref={core} geometry={CYL} dispose={null} quaternion={geo.quat} position={geo.mid} visible={false} renderOrder={3}>
         <meshBasicMaterial ref={coreMat} color={geo.core} toneMapped={false} transparent depthWrite={false} />
       </mesh>
-      <mesh ref={halo} geometry={CYL} quaternion={geo.quat} position={geo.mid} visible={false} renderOrder={3}>
+      <mesh ref={halo} geometry={CYL} dispose={null} quaternion={geo.quat} position={geo.mid} visible={false} renderOrder={3}>
         <meshBasicMaterial ref={haloMat} color={geo.halo} toneMapped={false} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
-      <mesh ref={head} geometry={SPHERE} visible={false}>
+      <mesh ref={head} geometry={SPHERE} dispose={null} visible={false}>
         <meshBasicMaterial color={geo.core} toneMapped={false} />
       </mesh>
-      <mesh ref={impact} geometry={SPHERE} position={geo.b} visible={false}>
+      <mesh ref={impact} geometry={SPHERE} dispose={null} position={geo.b} visible={false}>
         <meshBasicMaterial ref={impactMat} color={geo.halo} toneMapped={false} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
     </group>
@@ -144,10 +144,10 @@ function Packet({ fx }: { fx: Fx }) {
 
   return (
     <group>
-      <mesh ref={cube} geometry={CUBE} visible={false}>
+      <mesh ref={cube} geometry={CUBE} dispose={null} visible={false}>
         <meshBasicMaterial color={ends.color} toneMapped={false} />
       </mesh>
-      <mesh ref={trail} geometry={SPHERE} visible={false}>
+      <mesh ref={trail} geometry={SPHERE} dispose={null} visible={false}>
         <meshBasicMaterial ref={trailMat} color={ends.color} toneMapped={false} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
     </group>
