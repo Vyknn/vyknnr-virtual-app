@@ -47,8 +47,8 @@ export class MockOrchestratorService implements OrchestratorService {
       const n = this.now();
       const dt = Math.min(MAX_REAL_DT, Math.max(0, (n - this.last) / 1000));
       this.last = n;
-      this.advance(dt);
       this.raf = window.requestAnimationFrame(loop);
+      this.advance(dt);
     };
     this.raf = window.requestAnimationFrame(loop);
   }
@@ -59,6 +59,8 @@ export class MockOrchestratorService implements OrchestratorService {
   }
 
   private emit(events: SimEvent[]): void {
-    for (const l of [...this.listeners]) l(this.state, events);
+    for (const l of [...this.listeners]) {
+      try { l(this.state, events); } catch (err) { console.error('orchestrator listener error', err); }
+    }
   }
 }

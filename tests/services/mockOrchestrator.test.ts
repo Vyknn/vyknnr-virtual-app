@@ -36,3 +36,16 @@ describe('MockOrchestratorService', () => {
     expect(b.getState().t).toBeCloseTo(a.getState().t * 4);
   });
 });
+
+describe('listener isolation', () => {
+  it('throwing listener does not block others', () => {
+    const s = new MockOrchestratorService({ seed: 1 });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fn = vi.fn();
+    s.subscribe(() => { throw new Error('boom'); });
+    s.subscribe(fn);
+    s.submit(CMD);
+    expect(fn).toHaveBeenCalled();
+    err.mockRestore();
+  });
+});

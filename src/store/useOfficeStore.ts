@@ -25,23 +25,44 @@ export const useOfficeStore: UseBoundStore<StoreApi<OfficeStore>> = create<Offic
   setSpeed: (m) => { service?.setSpeed(m); set({ speed: m }); },
 }));
 
-export function fxFromEvents(state: SimState, events: SimEvent[]): Fx[] {
-  const out: Fx[] = [];
+/** Rack nodes whose beam target is unknown until the agent starts walking. */
+export interface PendingBeam { nodeId: string; agentId: string }
+
+export function fxFromEvents(state: SimState, events: SimEvent[]): { fx: Fx[]; pending: PendingBeam[] } {
+  const fx: Fx[] = [];
+  const pending: PendingBeam[] = [];
   for (const e of events) {
     if (e.type === 'node.dispatched') {
       const node = state.nodes[e.nodeId];
+      if (node?.workplace === 'rack') { pending.push({ nodeId: e.nodeId, agentId: e.agentId }); continue; }
       const color = (node && state.jobs[node.jobId]?.color) ?? '#ffffff';
-      const agent = state.agents[e.agentId];
-      const dest = node?.workplace === 'rack' && agent && agent.path.length > 0
-        ? agent.path[agent.path.length - 1] : deskOf(e.agentId).seat;
-      out.push({ id: `fx${++fxSeq}`, kind: 'beam', from: OFFICE.corePos, to: dest, born: state.t, color });
+      fx.push({ id: `fx${++fxSeq}`, kind: 'beam', from: OFFICE.corePos, to: deskOf(e.agentId).seat, born: state.t, color });
     } else if (e.type === 'handoff') {
       const node = state.nodes[e.toNodeId];
       const color = (node && state.jobs[node.jobId]?.color) ?? '#ffffff';
-      out.push({ id: `fx${++fxSeq}`, kind: 'packet', from: deskOf(e.fromAgentId).cell, to: deskOf(e.toAgentId).cell, born: state.t, color });
+      fx.push({ id: `fx${++fxSeq}`, kind: 'packet', from: deskOf(e.fromAgentId).cell, to: deskOf(e.toAgentId).cell, born: state.t, color });
     }
   }
-  return out;
+  return { fx, pending };
+}
+
+/** Resolve pending rack beams: agent walking to this node -> last path cell; node running -> agent cell. */
+export function resolvePending(state: SimState, pending: PendingBeam[]): { fx: Fx[]; pending: PendingBeam[] } {
+  const fx: Fx[] = [];
+  const rest: PendingBeam[] = [];
+  for (const p of pending) {
+    const node = state.nodes[p.nodeId];
+    const agent = state.agents[p.agentId];
+    if (!node || !agent || node.status === 'done') continue;
+    let to: Cell | null = null;
+    if (agent.currentNodeId === p.nodeId && agent.state === 'walking_to_work' && agent.path.length > 0) to = agent.path[agent.path.length - 1];
+    else if (node.status === 'running') to = agent.cell;
+    if (to) {
+      const color = state.jobs[node.jobId]?.color ?? '#ffffff';
+      fx.push({ id: `fx${++fxSeq}`, kind: 'beam', from: OFFICE.corePos, to, born: state.t, color });
+    } else rest.push(p);
+  }
+  return { fx, pending: rest };
 }
 
 export function pruneFx(fx: Fx[], t: number): Fx[] {
@@ -49,15 +70,31 @@ export function pruneFx(fx: Fx[], t: number): Fx[] {
   return kept.length === fx.length ? fx : kept;
 }
 
+let disconnect: (() => void) | null = null;
+let pendingBeams: PendingBeam[] = [];
+
 export function connectService(svc: OrchestratorService): () => void {
+  disconnect?.();
   service = svc;
+  pendingBeams = [];
   useOfficeStore.setState({ sim: svc.getState() as SimState });
-  const unsub = svc.subscribe((state, events) => {
+  const unsub = svc.subscribe((s, events) => {
+    const state = s as SimState;
+    const added = fxFromEvents(state, events);
+    const res = resolvePending(state, [...pendingBeams, ...added.pending]);
+    pendingBeams = res.pending;
+    const newFx = [...added.fx, ...res.fx];
     const cur = useOfficeStore.getState().fx;
-    const next = pruneFx(events.length ? [...cur, ...fxFromEvents(state as SimState, events)] : cur, state.t);
-    useOfficeStore.setState({ sim: state as SimState, fx: next });
+    const next = pruneFx(newFx.length ? [...cur, ...newFx] : cur, state.t);
+    useOfficeStore.setState({ sim: state, fx: next });
   });
-  return () => { unsub(); if (service === svc) service = null; };
+  const off = () => {
+    unsub();
+    if (service === svc) { service = null; pendingBeams = []; }
+    if (disconnect === off) disconnect = null;
+  };
+  disconnect = off;
+  return off;
 }
 
 let singleton: MockOrchestratorService | null = null;

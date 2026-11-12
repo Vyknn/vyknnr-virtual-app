@@ -6,6 +6,28 @@ import { OFFICE } from '@/core/office';
 const CMD = 'ทำ API login ให้เกม Space Run';
 
 describe('store', () => {
+  it('rack beam targets a rack console', () => {
+    const s = new MockOrchestratorService({ seed: 1 });
+    const un = connectService(s);
+    useOfficeStore.getState().submit('deploy server ใหม่');
+    const seen: { x: number; z: number }[] = [];
+    for (let i = 0; i < 600; i++) {
+      s.advance(0.1);
+      for (const f of useOfficeStore.getState().fx) if (f.kind === 'beam') seen.push(f.to);
+    }
+    const consoles = OFFICE.rackConsoles.map((c) => `${c.x},${c.z}`);
+    expect(seen.some((c) => consoles.includes(`${c.x},${c.z}`))).toBe(true);
+    un();
+  });
+  it('reconnect drops previous connection', () => {
+    const a = new MockOrchestratorService({ seed: 1 });
+    const b = new MockOrchestratorService({ seed: 2 });
+    connectService(a);
+    const un = connectService(b);
+    a.submit(CMD); a.advance(1);
+    expect(useOfficeStore.getState().sim).toBe(b.getState());
+    un();
+  });
   it('maps dispatch to beams, prunes old fx, unique ids', () => {
     const s = new MockOrchestratorService({ seed: 1 });
     const un = connectService(s);
