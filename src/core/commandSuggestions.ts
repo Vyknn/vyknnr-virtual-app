@@ -2,7 +2,7 @@
  * Example commands shown in the chat empty state. Every entry must resolve to a non-null intent in
  * `makePlan` (enforced by tests/core/commandSuggestions.test.ts), so keep keywords aligned with roster.ts.
  */
-export const BASE_SUGGESTIONS = ['ทำเกมใหม่แนว puzzle', 'ทำ API login', 'ทำโลโก้'] as const;
+export const BASE_SUGGESTIONS = ['ให้ทุกคนทำงานทั้งหมด', 'ทำเกมใหม่แนว puzzle', 'ทำ API login', 'ทำโลโก้'] as const;
 
 export const EXTRA_SUGGESTIONS: readonly string[] = [
   // new game (10)
@@ -46,3 +46,21 @@ export const EXTRA_SUGGESTIONS: readonly string[] = [
 ];
 
 export const ALL_SUGGESTIONS: readonly string[] = [...BASE_SUGGESTIONS, ...EXTRA_SUGGESTIONS];
+
+/**
+ * Autocomplete: rank suggestions for a partial input. Prefix matches first, then substring matches,
+ * then entries containing every whitespace-separated token. Exact matches are dropped (nothing to complete).
+ */
+export function matchSuggestions(input: string, limit = 6, pool: readonly string[] = ALL_SUGGESTIONS): string[] {
+  const q = input.toLowerCase().trim();
+  if (!q) return [];
+  const tokens = q.split(/\s+/);
+  const ranked: { s: string; rank: number; i: number }[] = [];
+  pool.forEach((s, i) => {
+    const l = s.toLowerCase();
+    if (l === q) return;
+    const rank = l.startsWith(q) ? 0 : l.includes(q) ? 1 : tokens.every((t) => l.includes(t)) ? 2 : -1;
+    if (rank >= 0) ranked.push({ s, rank, i });
+  });
+  return ranked.sort((a, b) => a.rank - b.rank || a.i - b.i).slice(0, limit).map((r) => r.s);
+}

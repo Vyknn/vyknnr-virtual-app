@@ -234,7 +234,8 @@ function materialize(d: Draft, job: Job, plan: PlanResult, at: number) {
   for (const pn of plan.nodes) {
     const id = ids.get(pn.key)!;
     nodeW(d, id);
-    d.s.nodes[id] = { id, jobId: job.id, title: pn.title, skill: pn.skill, assigneeId: pickAssignee(pn.skill, job.command, view),
+    d.s.nodes[id] = { id, jobId: job.id, title: pn.title, skill: pn.skill,
+      assigneeId: pn.assigneeId ?? pickAssignee(pn.skill, job.command, view), pinned: pn.assigneeId !== undefined,
       dependsOn: pn.dependsOn.map((k) => ids.get(k)!), status: pn.dependsOn.length ? 'blocked' : 'ready', workplace: pn.workplace,
       steps: [], stepIndex: 0, stepElapsed: 0, inputs: [], output: null };
     nodeIds.push(id);
@@ -254,7 +255,7 @@ function dispatch(d: Draft) {
       if (d.s.nodes[nid].status !== 'ready') continue;
       const node = nodeW(d, nid);
       const view = assignView(d);
-      if (view[node.assigneeId].state !== 'idle') {
+      if (!node.pinned && view[node.assigneeId].state !== 'idle') {
         // Prefer reassignment to a free owner of the same skill (spec §9.2 step 3).
         const alt = pickAssignee(node.skill, job.command, view);
         if (view[alt].state === 'idle') node.assigneeId = alt;
