@@ -24,3 +24,9 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/* Dashboard overlay: thin translucent scrollbars inside glass panels. */
+#office-ui * {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.5) transparent;
+}

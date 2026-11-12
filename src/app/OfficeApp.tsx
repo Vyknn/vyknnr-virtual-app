@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import Dashboard from '@/ui/Dashboard';
 import { connectService, getOfficeService, useOfficeStore } from '@/store/useOfficeStore';
 
 // WebGL scene is client-only (ssr:false must live in a Client Component in Next 16).
@@ -30,8 +31,8 @@ export default function OfficeApp() {
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-[#e8edf4]">
       <OfficeScene />
-      {/* Task 9: glassmorphism UI panels mount in this overlay (pointer-events re-enabled per panel). */}
-      <div id="office-ui" className="pointer-events-none absolute inset-0" />
+      {/* Glassmorphism overlay: pointer-events-none root, re-enabled per panel. */}
+      <Dashboard />
     </main>
   );
 }

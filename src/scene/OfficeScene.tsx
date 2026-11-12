@@ -3,7 +3,6 @@
 import { Suspense, useEffect, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
-import { Stats } from '@react-three/drei';
 import { Bloom, EffectComposer, ToneMapping } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -114,7 +113,6 @@ export default function OfficeScene({ children }: OfficeSceneProps) {
         {/* EffectComposer forces renderer.toneMapping = NoToneMapping; tone-map once at the end instead. */}
         <ToneMapping mode={ToneMappingMode.NEUTRAL} />
       </EffectComposer>
-      {process.env.NODE_ENV === 'development' && <Stats />}
     </Canvas>
   );
 }
