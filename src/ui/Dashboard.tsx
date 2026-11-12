@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { rotateCameraLeft, rotateCameraRight } from '@/scene/cameraControls';
 import AgentDetail from './AgentDetail';
 import AgentTelemetry from './AgentTelemetry';
@@ -12,10 +12,30 @@ import PlanGraph from './PlanGraph';
 import QueueList from './QueueList';
 import TopBar from './TopBar';
 
-function CameraButtons() {
+function CameraButtons({ uiHidden, onToggleUi }: { uiHidden: boolean; onToggleUi: () => void }) {
   const b = 'grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition hover:bg-white hover:text-slate-900';
   return (
-    <div className={`${glass} flex items-center gap-0.5 p-1`} role="group" aria-label="Camera rotation">
+    <div className={`${glass} flex items-center gap-0.5 p-1`} role="group" aria-label="View controls">
+      <button
+        type="button"
+        className={b}
+        onClick={onToggleUi}
+        aria-pressed={uiHidden}
+        title={uiHidden ? 'แสดง UI panel (H)' : 'ซ่อน UI panel (H)'}
+        aria-label={uiHidden ? 'Show UI panels' : 'Hide UI panels'}
+      >
+        {uiHidden ? (
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 3l18 18" /><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1" />
+            <path d="M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a10 10 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+          </svg>
+        )}
+      </button>
+      <span className="mx-0.5 h-5 w-px bg-slate-300/70" aria-hidden />
       <button type="button" className={b} onClick={rotateCameraLeft} title="หมุนกล้องซ้าย (Q)" aria-label="Rotate camera left">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" />
@@ -52,6 +72,30 @@ function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; c
 export default function Dashboard() {
   const [left, setLeft] = useState(false);
   const [right, setRight] = useState(false);
+  const [uiHidden, setUiHidden] = useState(false);
+  const toggleUi = () => setUiHidden((v) => !v);
+
+  // H toggles panels; ignored while typing (chat/search inputs, Thai IME composition).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 'h' || e.key === 'H') setUiHidden((v) => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  if (uiHidden) {
+    return (
+      <div id="office-ui" className="pointer-events-none absolute inset-0">
+        <div className="absolute bottom-3 right-3">
+          <CameraButtons uiHidden onToggleUi={toggleUi} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div id="office-ui" className="pointer-events-none absolute inset-0 flex flex-col gap-2.5 p-2.5 lg:gap-3 lg:p-3">
@@ -61,7 +105,7 @@ export default function Dashboard() {
       <div className="flex items-start gap-2 lg:hidden">
         <Toggle on={left} onClick={() => { setLeft((v) => !v); setRight(false); }}>แชต AI Core</Toggle>
         <Toggle on={right} onClick={() => { setRight((v) => !v); setLeft(false); }}>Agents</Toggle>
-        <div className="ml-auto"><CameraButtons /></div>
+        <div className="ml-auto"><CameraButtons uiHidden={false} onToggleUi={toggleUi} /></div>
       </div>
 
       <div className="relative min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(300px,340px)_1fr_minmax(300px,340px)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:gap-3">
@@ -78,7 +122,7 @@ export default function Dashboard() {
 
         {/* Center: free scene area + camera controls */}
         <div className="hidden min-h-0 items-end justify-end lg:col-start-2 lg:row-start-2 lg:flex">
-          <CameraButtons />
+          <CameraButtons uiHidden={false} onToggleUi={toggleUi} />
         </div>
 
         {/* Right: agent detail + telemetry */}
