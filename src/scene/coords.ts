@@ -19,3 +19,9 @@ export function posToWorld(p: { x: number; z: number }, y = 0): [number, number,
 export function rectCenterWorld(r: { x: number; z: number; w: number; d: number }, y = 0): [number, number, number] {
   return [r.x + r.w / 2 - HALF_W, y, r.z + r.d / 2 - HALF_D];
 }
+
+/** Allocation-free `posToWorld` for per-frame use: writes into `out` and returns it. */
+export function posToWorldInto<T extends { set(x: number, y: number, z: number): unknown }>(p: { x: number; z: number }, out: T, y = 0): T {
+  out.set(p.x + 0.5 - HALF_W, y, p.z + 0.5 - HALF_D);
+  return out;
+}

@@ -9,6 +9,7 @@ import { ToneMappingMode } from 'postprocessing';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { HALF_D, HALF_W } from './coords';
 import { PALETTE } from './materials';
+import { useOfficeStore } from '@/store/useOfficeStore';
 import IsoCamera from './IsoCamera';
 import Floor from './Floor';
 import Zones from './Zones';
@@ -16,6 +17,8 @@ import Desks from './Desks';
 import ServerRoom from './ServerRoom';
 import Lounge from './Lounge';
 import AICore from './AICore';
+import Agents from './AgentAvatar';
+import Effects from './Effects';
 
 /*
  * Exposure budget for bloom (luminanceThreshold = 1.0):
@@ -85,6 +88,7 @@ export default function OfficeScene({ children }: OfficeSceneProps) {
   return (
     <Canvas
       shadows
+      onPointerMissed={() => useOfficeStore.getState().select(null)}
       dpr={[1, 1.75]}
       gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
       style={{ position: 'absolute', inset: 0 }}
@@ -101,6 +105,8 @@ export default function OfficeScene({ children }: OfficeSceneProps) {
         <ServerRoom />
         <Lounge />
         <AICore />
+        <Agents />
+        <Effects />
         {children}
       </Suspense>
       <EffectComposer multisampling={4}>
