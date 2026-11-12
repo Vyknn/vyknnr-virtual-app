@@ -7,7 +7,7 @@ export const ROSTER: AgentDef[] = [
     voice: { accept: ['รับทราบ ตัดสินใจเลย', 'ภาพใหญ่ชัดแล้ว ลุยเลย'], done: ['อนุมัติเรียบร้อย', 'ผ่านครับ เดินหน้าต่อ'] } },
   { id: 'mali', name: 'Mali', dept: 'producer', title: 'Producer', personality: 'organizer; splits big jobs across depts',
     color: '#e67e22', skills: ['breakdown_requirements', 'write_brief'], tools: ['split_tasks', 'write_doc', 'assign_owner'],
-    keywords: ['brief', 'requirements', 'plan', 'แผนงาน'], idleStyle: 'chat',
+    keywords: ['brief', 'requirements', 'brd', 'สรุปความต้องการ', 'แผนงาน'], idleStyle: 'chat',
     voice: { accept: ['เดี๋ยวมะลิแบ่งงานให้ค่ะ', 'จัดตารางเรียบร้อย เริ่มเลย'], done: ['แบ่งงานเสร็จแล้วค่ะ', 'บรีฟพร้อมส่งต่อทุกทีม'] } },
   { id: 'kai', name: 'Kai', dept: 'gamedev', title: 'Gameplay Programmer', personality: 'experimental; gameplay, mechanics',
     color: '#27ae60', skills: ['gameplay', 'prototype'], tools: ['unity_editor', 'prototype_mechanic', 'playtest'],
@@ -79,10 +79,10 @@ export const ROSTER: AgentDef[] = [
     voice: { accept: ['รับค่ะ เดี๋ยวออกเอกสารให้', 'ขอเช็กรายการก่อนนะคะ'], done: ['ใบแจ้งหนี้ออกแล้วค่ะ', 'เงินเดือนเรียบร้อย'] } },
 ];
 
-const BY_ID: Record<string, AgentDef> = Object.fromEntries(ROSTER.map((a) => [a.id, a]));
+const BY_ID = new Map<string, AgentDef>(ROSTER.map((a) => [a.id, a]));
 
 export function agentById(id: string): AgentDef {
-  const a = BY_ID[id];
+  const a = BY_ID.get(id);
   if (!a) throw new Error(`Unknown agent: ${id}`);
   return a;
 }
@@ -102,7 +102,11 @@ export const DEPT_LABEL: Record<DeptId, string> = {
 };
 
 export const SKILL_OWNERS: Record<SkillId, string[]> = (() => {
-  const m: Record<SkillId, string[]> = {};
-  for (const a of ROSTER) for (const s of a.skills) (m[s] ??= []).push(a.id);
-  return m;
+  const m = new Map<SkillId, string[]>();
+  for (const a of ROSTER) for (const s of a.skills) {
+    const list = m.get(s);
+    if (list) list.push(a.id);
+    else m.set(s, [a.id]);
+  }
+  return Object.fromEntries(m);
 })();

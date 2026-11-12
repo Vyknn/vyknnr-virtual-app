@@ -41,5 +41,17 @@ describe('roster', () => {
   it('agentById works', () => {
     expect(agentById('kai').name).toBe('Kai');
     expect(() => agentById('nope')).toThrow();
+    expect(() => agentById('constructor')).toThrow();
+    expect(() => agentById('toString')).toThrow();
+  });
+  it('pins dept per agent id', () => {
+    const expected: Record<string, DeptId> = {
+      arthit: 'ceo', mali: 'producer', kai: 'gamedev', ploy: 'gamedev', tan: 'gamedev',
+      mint: 'graphic', bank: 'graphic', fah: 'frontend', nont: 'frontend',
+      nara: 'backend', pete: 'backend', june: 'mobile', ohm: 'mobile', beam: 'qa',
+      jazz: 'sound', praew: 'marketing', toy: 'marketing', somchai: 'account', lin: 'account',
+    };
+    for (const [id, dept] of Object.entries(expected)) expect(agentById(id).dept).toBe(dept);
+    expect(Object.keys(expected).length).toBe(19);
   });
 });
