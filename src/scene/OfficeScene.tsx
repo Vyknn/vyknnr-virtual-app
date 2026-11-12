@@ -1,5 +1,7 @@
 'use client';
 
+import './threeConsole'; // must run before <Canvas> creates its store (see file)
+
 import { Suspense, useEffect, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
