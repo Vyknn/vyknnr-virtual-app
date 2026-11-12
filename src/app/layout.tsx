@@ -14,7 +14,7 @@ const notoSansThai = Noto_Sans_Thai({
 
 export const metadata: Metadata = {
   title: "Pixel Forge Studio — AI Agent Orchestrator",
-  description: "Isometric 3D AI agent office simulation",
+  description: "จำลองออฟฟิศ AI Agent แบบ 3 มิติ ไอโซเมตริก",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
