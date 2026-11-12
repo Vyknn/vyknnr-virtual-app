@@ -1,7 +1,5 @@
+import OfficeApp from './OfficeApp';
+
 export default function Home() {
-  return (
-    <main className="flex flex-1 items-center justify-center">
-      <p>Pixel Forge Studio</p>
-    </main>
-  );
+  return <OfficeApp />;
 }

@@ -1,0 +1,29 @@
+'use client';
+
+import { useEffect } from 'react';
+import dynamic from 'next/dynamic';
+import { connectService, getOfficeService } from '@/store/useOfficeStore';
+
+// WebGL scene is client-only (ssr:false must live in a Client Component in Next 16).
+const OfficeScene = dynamic(() => import('@/scene/OfficeScene'), {
+  ssr: false,
+  loading: () => <div className="absolute inset-0 grid place-items-center text-sm text-slate-500">กำลังโหลดออฟฟิศ…</div>,
+});
+
+/** Client bootstrap: connects the mock orchestrator to the store, starts the sim clock, renders the scene. */
+export default function OfficeApp() {
+  useEffect(() => {
+    const svc = getOfficeService();
+    const off = connectService(svc);
+    svc.start();
+    return () => { svc.stop(); off(); };
+  }, []);
+
+  return (
+    <main className="relative h-dvh w-full overflow-hidden bg-[#e8edf4]">
+      <OfficeScene />
+      {/* Task 9: glassmorphism UI panels mount in this overlay (pointer-events re-enabled per panel). */}
+      <div id="office-ui" className="pointer-events-none absolute inset-0" />
+    </main>
+  );
+}
