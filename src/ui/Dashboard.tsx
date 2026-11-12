@@ -104,7 +104,7 @@ export default function Dashboard() {
         <div className="ml-auto"><CameraButtons uiHidden={uiHidden} onToggleUi={toggleUi} /></div>
       </div>
 
-      <div className="relative min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(300px,340px)_1fr_minmax(300px,340px)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:gap-3">
+      <div className="relative min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(300px,340px)_1fr_minmax(236px,264px)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:gap-3">
         <div className="hidden sm:block lg:col-span-2 lg:row-start-1">
           <KpiCards />
         </div>
@@ -123,7 +123,7 @@ export default function Dashboard() {
 
         {/* Right: agent detail + telemetry */}
         <aside
-          className={`${uiHidden ? 'hidden' : `${right ? 'flex' : 'hidden'} lg:flex`} absolute inset-x-0 inset-y-0 z-20 min-h-0 flex-col gap-3 sm:left-auto sm:w-[360px] lg:static lg:z-auto lg:col-start-3 lg:row-span-3 lg:row-start-1 lg:w-auto`}
+          className={`${uiHidden ? 'hidden' : `${right ? 'flex' : 'hidden'} lg:flex`} absolute inset-x-0 inset-y-0 z-20 min-h-0 flex-col gap-3 sm:left-auto sm:w-72 lg:static lg:z-auto lg:col-start-3 lg:row-span-3 lg:row-start-1 lg:w-auto`}
         >
           <div className="max-h-[60%] shrink-0 overflow-y-auto rounded-2xl">
             <AgentDetail />
