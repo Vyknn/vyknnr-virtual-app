@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useRef, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import * as THREE from 'three';
-import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import { Html } from '@react-three/drei';
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { ROSTER } from '@/core/roster';
 import { OFFICE, deskOf } from '@/core/office';
 import { DONE_TIME } from '@/core/sim';
@@ -104,27 +103,23 @@ function nodeProgress(n: TaskNode): number {
 
 // ------------------------------------------------------------------ label styles (glass pill, see reference FL-03 LOAD-3109)
 
-const PILL_STYLE: CSSProperties = {
-  display: 'none',
-  alignItems: 'center',
-  gap: 6,
-  padding: '3px 9px 3px 7px',
-  borderRadius: 7,
-  background: 'rgba(15, 23, 42, 0.78)',
-  border: '1px solid rgba(255,255,255,0.18)',
-  boxShadow: '0 4px 14px rgba(15,23,42,0.25)',
-  backdropFilter: 'blur(6px)',
-  WebkitBackdropFilter: 'blur(6px)',
-  color: '#f8fafc',
-  font: '600 11px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-  letterSpacing: '0.03em',
-  whiteSpace: 'nowrap',
-  userSelect: 'none',
-  position: 'relative',
-  overflow: 'hidden',
-};
-const DOT_STYLE: CSSProperties = { width: 7, height: 7, borderRadius: 999, flex: '0 0 auto' };
-const BAR_STYLE: CSSProperties = { position: 'absolute', left: 0, bottom: 0, height: 2, width: '0%', opacity: 0.9 };
+/*
+ * Labels are plain DOM built imperatively (no drei <Html>): <Html> mounts a nested React root per label
+ * and unmounts it synchronously in an effect cleanup, which triggers React's
+ * "synchronously unmount a root while React was already rendering" warning (StrictMode / HMR / unmount).
+ * The label content was already ref-driven, so a React root bought nothing.
+ */
+const WRAP_CSS = 'position:absolute;left:0;top:0;pointer-events:none;user-select:none;z-index:10;will-change:transform;';
+const PILL_CSS = [
+  'display:none', 'align-items:center', 'gap:6px', 'padding:3px 9px 3px 7px', 'border-radius:7px',
+  'background:rgba(15,23,42,0.78)', 'border:1px solid rgba(255,255,255,0.18)', 'box-shadow:0 4px 14px rgba(15,23,42,0.25)',
+  'backdrop-filter:blur(6px)', '-webkit-backdrop-filter:blur(6px)', 'color:#f8fafc',
+  'font:600 11px/1.25 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', 'letter-spacing:0.03em',
+  'white-space:nowrap', 'position:relative', 'overflow:hidden',
+].join(';');
+const DOT_CSS = 'width:7px;height:7px;border-radius:999px;flex:0 0 auto;';
+const BAR_CSS = 'position:absolute;left:0;bottom:0;height:2px;width:0%;opacity:0.9;';
+const LABEL_V = new THREE.Vector3(); // projection scratch (labels are positioned one at a time)
 
 // ------------------------------------------------------------------ avatar
 
@@ -142,10 +137,12 @@ function AgentAvatar({ def }: { def: AgentDef }) {
   const shR = useRef<THREE.Group>(null);
   const head = useRef<THREE.Group>(null);
   const cup = useRef<THREE.Mesh>(null);
-  const pill = useRef<HTMLDivElement>(null);
-  const dot = useRef<HTMLSpanElement>(null);
-  const text = useRef<HTMLSpanElement>(null);
-  const bar = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLDivElement | null>(null);
+  const pill = useRef<HTMLDivElement | null>(null);
+  const dot = useRef<HTMLSpanElement | null>(null);
+  const text = useRef<HTMLSpanElement | null>(null);
+  const bar = useRef<HTMLDivElement | null>(null);
+  const host = useThree((st) => st.gl.domElement.parentElement);
 
   // Mutable per-avatar animation state (allocated once).
   const anim = useRef({
@@ -165,11 +162,31 @@ function AgentAvatar({ def }: { def: AgentDef }) {
     lastSelected: false,
     lastShow: false,
     lastPct: -1,
+    lastX: NaN,
+    lastY: NaN,
   });
 
   useEffect(() => () => {
     if (anim.current.hovered) document.body.style.cursor = '';
   }, []);
+
+  // Build the label DOM once per host; reset caches so the next throttled tick repaints it.
+  useEffect(() => {
+    if (!host) return;
+    const w = document.createElement('div'); w.style.cssText = WRAP_CSS;
+    const p = document.createElement('div'); p.style.cssText = PILL_CSS;
+    const d = document.createElement('span'); d.style.cssText = DOT_CSS;
+    const t = document.createElement('span'); t.textContent = def.name;
+    const b = document.createElement('div'); b.style.cssText = BAR_CSS;
+    p.append(d, t, b); w.append(p); host.append(w);
+    wrap.current = w; pill.current = p; dot.current = d; text.current = t; bar.current = b;
+    const m = anim.current;
+    m.lastShow = false; m.lastText = def.name; m.lastColor = ''; m.lastPct = -1; m.lastX = NaN; m.lastY = NaN; m.labelT = 1;
+    return () => {
+      w.remove();
+      wrap.current = pill.current = bar.current = null; dot.current = text.current = null;
+    };
+  }, [host, def.name]);
 
   useFrame((state, rawDelta) => {
     const s = useOfficeStore.getState();
@@ -269,14 +286,31 @@ function AgentAvatar({ def }: { def: AgentDef }) {
     if (head.current) { head.current.rotation.x = cur[HEAD_X]; head.current.rotation.y = cur[HEAD_Y]; }
     if (cup.current) cup.current.visible = showCup;
 
-    // --- label (DOM, throttled)
+    // --- label position (every frame while shown; write only when the pixel changes)
+    if (m.lastShow && wrap.current) {
+      r.getWorldPosition(LABEL_V);
+      LABEL_V.y += LABEL_Y;
+      LABEL_V.project(state.camera);
+      const x = Math.round((LABEL_V.x * 0.5 + 0.5) * state.size.width);
+      const y = Math.round((-LABEL_V.y * 0.5 + 0.5) * state.size.height);
+      if (x !== m.lastX || y !== m.lastY) {
+        wrap.current.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
+        m.lastX = x; m.lastY = y;
+      }
+    }
+
+    // --- label content (DOM, throttled)
     m.labelT += dt;
     if (m.labelT < 1 / LABEL_HZ) return;
     m.labelT = 0;
     if (a.currentNodeId) m.lastNode = a.currentNodeId;
     const selected = s.selectedAgentId === def.id;
     const show = a.state !== 'idle' || m.hovered || selected;
-    if (pill.current && show !== m.lastShow) { pill.current.style.display = show ? 'flex' : 'none'; m.lastShow = show; }
+    if (pill.current && show !== m.lastShow) {
+      pill.current.style.display = show ? 'flex' : 'none';
+      m.lastShow = show;
+      m.lastX = NaN; // reposition on the next frame
+    }
     if (!show) return;
     const node = a.currentNodeId ? s.sim.nodes[a.currentNodeId] : undefined;
     let pct = -1;
@@ -375,13 +409,6 @@ function AgentAvatar({ def }: { def: AgentDef }) {
           )}
         </group>
       </group>
-      <Html position={[0, LABEL_Y, 0]} center zIndexRange={[40, 10]} pointerEvents="none" style={{ pointerEvents: 'none' }}>
-        <div ref={pill} style={PILL_STYLE}>
-          <span ref={dot} style={DOT_STYLE} />
-          <span ref={text}>{def.name}</span>
-          <div ref={bar} style={BAR_STYLE} />
-        </div>
-      </Html>
     </group>
   );
 }
