@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react';
 import { ROSTER } from '@/core/roster';
+import { ALL_SUGGESTIONS } from '@/core/commandSuggestions';
 import type { AgentDef, ChatMessage, Deliverable } from '@/core/types';
 import { useOfficeStore } from '@/store/useOfficeStore';
 import { glass, label, monoChip, simClock } from './glass';
@@ -116,8 +117,11 @@ const Message = memo(function Message({ m }: { m: ChatMessage }) {
   );
 });
 
-function Composer() {
-  const [text, setText] = useState('');
+function Composer({ text, setText, inputRef }: {
+  text: string;
+  setText: (t: string) => void;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+}) {
   const submit = useOfficeStore((s) => s.submit);
   const send = () => {
     const t = text.trim();
@@ -131,6 +135,7 @@ function Composer() {
       onSubmit={(e) => { e.preventDefault(); send(); }}
     >
       <textarea
+        ref={inputRef}
         value={text}
         rows={2}
         onChange={(e) => setText(e.target.value)}
@@ -159,6 +164,13 @@ function Composer() {
 export default function ChatPanel({ className = '' }: { className?: string }) {
   const chat = useOfficeStore((s) => s.sim.chat);
   const scroller = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const [draft, setDraft] = useState('');
+  const fill = (s: string) => {
+    setDraft(s);
+    const el = input.current;
+    if (el) { el.focus(); requestAnimationFrame(() => el.setSelectionRange(s.length, s.length)); }
+  };
   useEffect(() => {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -175,14 +187,24 @@ export default function ChatPanel({ className = '' }: { className?: string }) {
         {chat.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white/50 p-3 text-xs text-slate-500">
             ยังไม่มีงาน ลองพิมพ์คำสั่ง เช่น
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {['ทำเกมใหม่แนว puzzle', 'ทำ API login', 'ทำโลโก้'].map((s) => <span key={s} className={monoChip}>{s}</span>)}
+            <div className="mt-1.5 flex max-h-48 flex-wrap gap-1 overflow-y-auto">
+              {ALL_SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => fill(s)}
+                  title="คลิกเพื่อใส่ในช่องพิมพ์"
+                  className={`${monoChip} cursor-pointer transition hover:bg-blue-50 hover:text-blue-700`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
           </div>
         )}
         {chat.map((m) => <Message key={m.id} m={m} />)}
       </div>
-      <Composer />
+      <Composer text={draft} setText={setDraft} inputRef={input} />
     </section>
   );
 }
