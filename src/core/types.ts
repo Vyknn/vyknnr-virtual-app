@@ -6,7 +6,9 @@ export interface AgentDef { id: string; name: string; dept: DeptId; title: strin
   voice: { accept: string[]; done: string[] } }
 export type AgentState = 'idle'|'walking_to_work'|'working'|'done'|'walking_to_lounge';
 export interface AgentRuntime { id: string; state: AgentState; cell: Cell; pos: { x: number; z: number };
-  path: Cell[]; heading: number; currentNodeId: string | null; queue: string[]; doneToday: number; stateTime: number }
+  path: Cell[]; heading: number; currentNodeId: string | null; queue: string[]; doneToday: number;
+  /** Absolute sim time (s) at which the current state began. */
+  stateTime: number }
 export type NodeStatus = 'blocked'|'ready'|'queued'|'running'|'done';
 export interface AgentStep { kind: 'thinking'|'tool_call'|'tool_result'|'output'; text: string; tool?: string; args?: Record<string,string>; at: number; duration: number }
 export interface TaskNode { id: string; jobId: string; title: string; skill: SkillId; assigneeId: string;

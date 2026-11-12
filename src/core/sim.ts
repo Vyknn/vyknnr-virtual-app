@@ -79,22 +79,27 @@ function planOf(command: string): PlanResult {
 interface Draft {
   s: SimState;           // new top-level object; records below replaced lazily
   events: SimEvent[];
-  nodesCopied: boolean; jobsCopied: boolean; chatCopied: boolean;
-  touchedNodes: Set<string>; touchedJobs: Set<string>;
+  agentsCopied: boolean; nodesCopied: boolean; jobsCopied: boolean; chatCopied: boolean;
+  touchedAgents: Set<string>; touchedNodes: Set<string>; touchedJobs: Set<string>;
 }
 
-function begin(s: SimState, cloneAgents: boolean): Draft {
-  const agents = cloneAgents ? cloneAgentRecord(s.agents) : s.agents;
-  return { s: { ...s, agents }, events: [], nodesCopied: false, jobsCopied: false, chatCopied: false,
-    touchedNodes: new Set(), touchedJobs: new Set() };
+function begin(s: SimState): Draft {
+  return { s: { ...s }, events: [], agentsCopied: false, nodesCopied: false, jobsCopied: false, chatCopied: false,
+    touchedAgents: new Set(), touchedNodes: new Set(), touchedJobs: new Set() };
 }
 function finish(d: Draft): { state: SimState; events: SimEvent[] } {
   return { state: d.s, events: d.events };
 }
-function cloneAgentRecord(src: Record<string, AgentRuntime>): Record<string, AgentRuntime> {
-  const out: Record<string, AgentRuntime> = {};
-  for (const id in src) { const a = src[id]; out[id] = { ...a, pos: { x: a.pos.x, z: a.pos.z } }; }
-  return out;
+/** Copy-on-write agent: cloned (with its own `pos`) on first write per tick; untouched agents keep identity.
+ *  `path`, `queue` and `cell` are always replaced, never mutated in place, so a shallow copy is enough. */
+function agentW(d: Draft, id: string): AgentRuntime {
+  if (!d.agentsCopied) { d.s.agents = { ...d.s.agents }; d.agentsCopied = true; }
+  if (!d.touchedAgents.has(id)) {
+    const a = d.s.agents[id];
+    d.s.agents[id] = { ...a, pos: { x: a.pos.x, z: a.pos.z } };
+    d.touchedAgents.add(id);
+  }
+  return d.s.agents[id];
 }
 function nodeW(d: Draft, id: string): TaskNode {
   if (!d.nodesCopied) { d.s.nodes = { ...d.s.nodes }; d.nodesCopied = true; }
@@ -130,7 +135,7 @@ export function createInitialState(seed = 1): SimState {
 }
 
 export function submitCommand(s: SimState, text: string): { state: SimState; events: SimEvent[] } {
-  const d = begin(s, false);
+  const d = begin(s);
   say(d, s.t, 'admin', text);
   const plan = planOf(text);
   if (plan.intent === null) {
@@ -165,16 +170,20 @@ export function tick(s: SimState, dt: number): { state: SimState; events: SimEve
   const total = Math.min(dt, MAX_TICK_DT);
   const n = Math.ceil(total / MAX_SUBSTEP - 1e-9);
   const sub = total / n;
-  const d = begin(s, true);
+  const d = begin(s);
   for (let i = 0; i < n; i++) substep(d, sub);
   return finish(d);
 }
 
+/** Sub-step-size independence: agents carry leftover time across transitions and randomness is stateless, so each
+ *  agent's own timeline is exact. Cross-agent coupling is quantised: dispatch (ready -> queue) runs only at sub-step
+ *  boundaries and planning advances per sub-step, so tick(10) vs 100 x tick(0.1) can differ by up to one sub-step of
+ *  latency per hand-off (position drift <= MAX_SUBSTEP * WALK_SPEED cells per hand-off). */
 function substep(d: Draft, dt: number) {
   const t0 = d.s.t;
   planning(d, dt, t0);
   dispatch(d);
-  for (const a of ROSTER) advanceAgent(d, d.s.agents[a.id], dt, t0);
+  for (const a of ROSTER) advanceAgent(d, a.id, dt, t0);
   dispatch(d);
   d.s.t = t0 + dt;
   updateCore(d);
@@ -250,7 +259,7 @@ function dispatch(d: Draft) {
         const alt = pickAssignee(node.skill, job.command, view);
         if (view[alt].state === 'idle') node.assigneeId = alt;
       }
-      const a = d.s.agents[node.assigneeId];
+      const a = agentW(d, node.assigneeId);
       a.queue = [...a.queue, nid];
       node.status = 'queued';
       d.events.push({ type: 'node.dispatched', nodeId: nid, agentId: a.id });
@@ -260,35 +269,51 @@ function dispatch(d: Draft) {
 
 // ---- agents
 
+/** Max state transitions per agent per sub-step. A legitimate sub-step needs only a handful (finish walk, arrive,
+ *  finish step, next step, ..., complete, done pause). Every iteration either returns (budget consumed) or performs one
+ *  transition that advances the agent's timeline, so hitting this bound means a logic bug (a zero-time transition
+ *  cycle), not a slow agent. */
+const MAX_AGENT_TRANSITIONS = 64;
+
 /** Advance one agent by `budget` seconds of its own timeline; leftover time carries across state transitions
- *  so results do not depend on sub-step size. */
-function advanceAgent(d: Draft, a: AgentRuntime, budget: number, t0: number) {
+ *  so results do not depend on sub-step size. `stateTime` is the absolute sim time the current state began, so
+ *  waiting (idle in place, done pause) and mid-step work never write to the agent, which keeps its object identity. */
+function advanceAgent(d: Draft, id: string, budget: number, t0: number) {
   const total = budget;
-  let guard = 0;
-  while (budget > 1e-12 && guard++ < 64) {
+  let a = d.s.agents[id];
+  const w = () => (a = agentW(d, id));
+  for (let guard = 0; budget > 1e-12; guard++) {
+    if (guard >= MAX_AGENT_TRANSITIONS) {
+      if (process.env.NODE_ENV !== 'production')
+        throw new Error(`sim: agent ${id} exceeded ${MAX_AGENT_TRANSITIONS} transitions in one sub-step (state ${a.state})`);
+      return; // production: drop the rest of this sub-step instead of hanging the frame
+    }
     const now = t0 + (total - budget);
     switch (a.state) {
       case 'idle':
       case 'walking_to_lounge': {
-        if (a.queue.length) { startWalkToWork(d, a, now); continue; }
+        if (a.queue.length) { w(); startWalkToWork(d, a, now); continue; }
         if (a.path.length) {
+          w();
           budget = move(a, budget);
-          if (!a.path.length) { a.state = 'idle'; a.stateTime = 0; }
+          if (!a.path.length) { a.state = 'idle'; a.stateTime = t0 + (total - budget); }
           continue;
         }
-        if (a.state === 'walking_to_lounge') { a.state = 'idle'; a.stateTime = 0; continue; }
+        if (a.state === 'walking_to_lounge') { w(); a.state = 'idle'; a.stateTime = now; continue; }
         // Wander decisions happen only on whole-second sim-time boundaries, so agents contending for the same free
         // spot resolve in the same (roster) order regardless of sub-step size.
         const last = Math.floor(now + budget + 1e-9);
-        const due = Math.max(Math.floor(now + 1e-9) + 1, Math.ceil(now + wanderThreshold(d, a) - a.stateTime - 1e-9));
-        if (due > last) { a.stateTime += budget; budget = 0; break; }
+        const due = Math.max(Math.floor(now + 1e-9) + 1, Math.ceil(a.stateTime + wanderThreshold(d, a) - 1e-9));
+        if (due > last) return;
         budget -= due - now;
-        a.stateTime = 0;
+        w();
+        a.stateTime = due;
         startWander(d, a);
-        if (!a.path.length) { a.stateTime += budget; budget = 0; }
+        if (!a.path.length) return; // nowhere free: keep standing, retry after another threshold
         continue;
       }
       case 'walking_to_work': {
+        w();
         budget = move(a, budget);
         if (!a.path.length) arriveAtWork(d, a, t0 + (total - budget));
         continue;
@@ -297,9 +322,8 @@ function advanceAgent(d: Draft, a: AgentRuntime, budget: number, t0: number) {
         const node = nodeW(d, a.currentNodeId!);
         const step = node.steps[node.stepIndex];
         const left = step.duration - node.stepElapsed;
-        if (left > budget) { node.stepElapsed += budget; a.stateTime += budget; budget = 0; break; }
+        if (left > budget) { node.stepElapsed += budget; return; }
         budget -= Math.max(0, left);
-        a.stateTime += Math.max(0, left);
         node.stepIndex += 1;
         node.stepElapsed = 0;
         const at = t0 + (total - budget);
@@ -307,16 +331,17 @@ function advanceAgent(d: Draft, a: AgentRuntime, budget: number, t0: number) {
           node.steps = node.steps.slice();
           node.steps[node.stepIndex] = { ...node.steps[node.stepIndex], at };
           d.events.push({ type: 'step.appended', nodeId: node.id, step: node.steps[node.stepIndex] });
-        } else completeNode(d, a, node, at);
+        } else { w(); completeNode(d, a, node, at); }
         continue;
       }
       case 'done': {
-        const left = DONE_TIME - a.stateTime;
-        if (left > budget) { a.stateTime += budget; budget = 0; break; }
+        const left = a.stateTime + DONE_TIME - now;
+        if (left > budget) return;
         budget -= Math.max(0, left);
         const at = t0 + (total - budget);
+        w();
         if (a.queue.length) startWalkToWork(d, a, at);
-        else startWalkToLounge(d, a);
+        else startWalkToLounge(d, a, at);
         continue;
       }
     }
@@ -345,13 +370,41 @@ function move(a: AgentRuntime, budget: number): number {
   return Math.max(0, budget);
 }
 
-/** Path from the agent's current location; if mid-segment, finish the segment first so it never cuts corners. */
-function routeTo(a: AgentRuntime, target: Cell): Cell[] {
+/** Path from the agent's current location; if mid-segment, finish the segment first so it never cuts corners.
+ *  Unreachable target (Review Focus #5): retry with nearestWalkable(target); if that is unreachable too, use the
+ *  reachable cell closest to the target. The path's last cell becomes the work/rest cell, so the agent never freezes. */
+export function routeTo(a: Pick<AgentRuntime, 'pos' | 'cell' | 'path'>, target: Cell, walk: (c: Cell) => boolean = isWalkable): Cell[] {
   const mid = a.pos.x !== a.cell.x || a.pos.z !== a.cell.z;
   const start = mid && a.path.length ? a.path[0] : a.cell;
-  const rest = findPath(start, target, isWalkable, W, D) ?? [];
+  let rest = findPath(start, target, walk, W, D);
+  if (!rest) {
+    const near = nearestWalkable(target, walk, W, D);
+    if (near) rest = findPath(start, near, walk, W, D);
+  }
+  if (!rest) rest = findPath(start, closestReachable(start, target, walk), walk, W, D) ?? [];
   return mid && a.path.length ? [a.path[0], ...rest] : rest;
 }
+
+/** BFS flood from `start`; the reachable cell with minimal Manhattan distance to `target` (ties: BFS order). */
+function closestReachable(start: Cell, target: Cell, walk: (c: Cell) => boolean): Cell {
+  const seen = new Set<number>([start.z * W + start.x]);
+  let best = start, bestD = manhattan(start, target);
+  const queue: Cell[] = [start];
+  for (let i = 0; i < queue.length; i++) {
+    const c = queue[i];
+    const dist = manhattan(c, target);
+    if (dist < bestD) { best = c; bestD = dist; }
+    for (const [dx, dz] of NEIGHBOURS) {
+      const n = { x: c.x + dx, z: c.z + dz };
+      const k = n.z * W + n.x;
+      if (seen.has(k) || !walk(n)) continue;
+      seen.add(k);
+      queue.push(n);
+    }
+  }
+  return best;
+}
+const NEIGHBOURS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
 function destination(a: AgentRuntime): Cell { return a.path.length ? a.path[a.path.length - 1] : a.cell; }
 
@@ -381,7 +434,7 @@ function workTarget(d: Draft, a: AgentRuntime, node: TaskNode): Cell {
 function startWalkToWork(d: Draft, a: AgentRuntime, at: number) {
   const node = d.s.nodes[a.queue[0]];
   a.state = 'walking_to_work';
-  a.stateTime = 0;
+  a.stateTime = at;
   a.path = routeTo(a, workTarget(d, a, node));
   const voice = agentById(a.id).voice.accept;
   say(d, at, a.id, voice[Math.floor(hash01(d.s.rngSeed, idNum(node.id), 11) * voice.length)], { jobId: node.jobId });
@@ -392,7 +445,7 @@ function arriveAtWork(d: Draft, a: AgentRuntime, at: number) {
   a.queue = a.queue.slice(1);
   a.currentNodeId = nid;
   a.state = 'working';
-  a.stateTime = 0;
+  a.stateTime = at;
   const node = nodeW(d, nid);
   a.heading = node.workplace === 'desk' ? deskOf(a.id).facing : RACK_FACING;
   const steps = makeSteps(node, agentById(a.id), nodeRng(d, nid, 1));
@@ -409,7 +462,7 @@ function completeNode(d: Draft, a: AgentRuntime, node: TaskNode, at: number) {
   node.output = makeDeliverable(node.skill, node.title, nodeRng(d, node.id, 2));
   a.currentNodeId = null;
   a.state = 'done';
-  a.stateTime = 0;
+  a.stateTime = at;
   a.doneToday += 1;
   d.events.push({ type: 'node.completed', nodeId: node.id });
   const voice = agentById(a.id).voice.done;
@@ -456,14 +509,14 @@ function freeLoungeSpots(d: Draft, a: AgentRuntime): { cell: Cell; style: string
   return OFFICE.loungeSpots.filter((l) => !held.has(l.cell.z * W + l.cell.x));
 }
 
-function startWalkToLounge(d: Draft, a: AgentRuntime) {
+function startWalkToLounge(d: Draft, a: AgentRuntime, at: number) {
   const style = agentById(a.id).idleStyle;
   const free = freeLoungeSpots(d, a);
   const pool = free.some((l) => l.style === style) ? free.filter((l) => l.style === style) : free;
   let best = pool[0]?.cell ?? nearestWalkable(OFFICE.loungeSpots[0].cell, isWalkable, W, D)!;
   for (const l of pool) if (manhattan(a.cell, l.cell) < manhattan(a.cell, best)) best = l.cell;
   a.state = 'walking_to_lounge';
-  a.stateTime = 0;
+  a.stateTime = at;
   a.path = routeTo(a, best);
 }
 

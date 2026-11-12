@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialState, submitCommand, tick, MAX_SUBSTEP, type SimState, type SimEvent } from '@/core/sim';
+import { createInitialState, submitCommand, tick, routeTo, MAX_SUBSTEP, type SimState, type SimEvent } from '@/core/sim';
 import { OFFICE, deskOf, isWalkable } from '@/core/office';
+import { findPath, nearestWalkable } from '@/core/pathfinding';
 import { ROSTER } from '@/core/roster';
 
 const DT = 0.1;
@@ -253,7 +254,7 @@ describe('immutability + determinism', () => {
     const r = tick(s, 0.1);
     expect(JSON.stringify(s)).toBe(snap);
     expect(r.state).not.toBe(s);
-    expect(r.state.agents).not.toBe(s.agents);
+    expect(r.state.agents).not.toBe(s.agents); // nara is walking
     expect(r.state.jobs).toBe(s.jobs);
   });
 
@@ -274,5 +275,61 @@ describe('immutability + determinism', () => {
     const settled = Object.values(r.state.agents).filter((a) => a.path.length === 0);
     for (const a of settled) expect(spots.has(`${a.cell.x},${a.cell.z}`)).toBe(true);
     expect(new Set(settled.map((a) => `${a.cell.x},${a.cell.z}`)).size).toBe(settled.length);
+  });
+});
+
+describe('Review Focus #5: unreachable targets never freeze an agent', () => {
+  /** Temporarily mark cells blocked in the shared OFFICE grid; always restored. */
+  function withBlocked<T>(cells: { x: number; z: number }[], fn: () => T): T {
+    const prev = cells.map((c) => OFFICE.blocked[c.z][c.x]);
+    cells.forEach((c) => { OFFICE.blocked[c.z][c.x] = true; });
+    try { return fn(); } finally { cells.forEach((c, i) => { OFFICE.blocked[c.z][c.x] = prev[i]; }); }
+  }
+
+  it('blocked desk seat: agent works at nearestWalkable(seat) instead', () => {
+    const seat = deskOf('nara').seat;
+    withBlocked([seat], () => {
+      const near = nearestWalkable(seat, isWalkable, OFFICE.width, OFFICE.depth)!;
+      expect(near).not.toEqual(seat);
+      const s = submit(createInitialState(), 'ทำ API login ให้เกม Space Run');
+      const r = runUntil(s, (x) => x.agents.nara.state === 'working', 60);
+      expect(r.ok).toBe(true);
+      expect(r.state.agents.nara.cell).toEqual(near);
+      const done = runUntil(r.state, allJobsDone, 300);
+      expect(done.ok).toBe(true);
+    });
+  });
+
+  it('routeTo: enclosed walkable target falls back to the closest reachable cell', () => {
+    const target = { x: 20, z: 5 };
+    const ring = [{ x: 19, z: 5 }, { x: 21, z: 5 }, { x: 20, z: 4 }, { x: 20, z: 6 }];
+    const walk = (c: { x: number; z: number }) => isWalkable(c) && !ring.some((r) => r.x === c.x && r.z === c.z);
+    const from = { x: 14, z: 15 };
+    expect(findPath(from, target, walk, OFFICE.width, OFFICE.depth)).toBeNull();
+    const path = routeTo({ pos: { ...from }, cell: from, path: [] }, target, walk);
+    expect(path.length).toBeGreaterThan(0);
+    const end = path[path.length - 1];
+    expect(walk(end)).toBe(true);
+    expect(Math.abs(end.x - target.x) + Math.abs(end.z - target.z)).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('agent copy-on-write', () => {
+  it('an agent standing idle keeps object identity across a small tick; a walker does not', () => {
+    let s = submit(createInitialState(), 'ทำ API login');
+    s = runUntil(s, (x) => x.agents.nara.state === 'walking_to_work', 10).state;
+    const r = tick(s, 0.1).state;
+    const still = Object.values(s.agents).filter((a) => a.state === 'idle' && a.path.length === 0 && a.queue.length === 0
+      && r.agents[a.id].cell.x === a.cell.x && r.agents[a.id].cell.z === a.cell.z && r.agents[a.id].path.length === 0);
+    expect(still.length).toBeGreaterThan(0);
+    for (const a of still) expect(r.agents[a.id]).toBe(a);
+    expect(r.agents.nara).not.toBe(s.agents.nara);
+    expect(s.agents.nara.pos).not.toBe(r.agents.nara.pos);
+  });
+
+  it('a fully idle office with nobody due to wander keeps the agents record identity', () => {
+    const s = createInitialState();
+    const r = tick(s, 0.1).state;
+    expect(r.agents).toBe(s.agents);
   });
 });

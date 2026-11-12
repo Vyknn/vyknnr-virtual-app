@@ -156,3 +156,6 @@ next-env.d.ts
 *.pem
 .vercel
 .superpowers/
+
+# Vitest output
+.vitest/
