@@ -1,8 +1,9 @@
 import type { AgentRuntime, DeptId, SkillId } from './types';
 import { ROSTER, SKILL_OWNERS } from './roster';
 
-export type Intent = 'new_game'|'feature_backend'|'feature_frontend'|'mobile_app'|'art_asset'|'audio'|'marketing_campaign'|'budget_report'|'bug_fix'|'infra'|'strategy'|'single';
-export interface PlanDraftNode { key: string; title: string; skill: SkillId; dependsOn: string[]; workplace: 'desk'|'rack' }
+export type Intent = 'all_hands'|'new_game'|'feature_backend'|'feature_frontend'|'mobile_app'|'art_asset'|'audio'|'marketing_campaign'|'budget_report'|'bug_fix'|'infra'|'strategy'|'single';
+/** `assigneeId` pins the node to one agent (sim skips skill-based pick / reassignment). */
+export interface PlanDraftNode { key: string; title: string; skill: SkillId; dependsOn: string[]; workplace: 'desk'|'rack'; assigneeId?: string }
 export interface PlanResult { intent: Intent | null; nodes: PlanDraftNode[]; reasoning: string[]; reply: string }
 
 const ALL_DEPTS: DeptId[] = ['ceo','producer','gamedev','graphic','frontend','backend','mobile','qa','sound','marketing','account'];
@@ -112,6 +113,22 @@ const NEW_GAME_NODES: PlanDraftNode[] = [
   node('approve', 'approve', ['launch']),
 ];
 
+// ---------- all hands: every agent gets exactly one task ----------
+export const ALL_HANDS_TRIGGERS = ['ทุกคน', 'ทั้งบริษัท', 'ทั้งทีม', 'all hands', 'all-hands', 'everyone'];
+const ALL_HANDS_FIRST = 'mali';   // producer writes the brief everyone works from
+const ALL_HANDS_LAST = 'arthit';  // CEO signs off after everyone is done
+
+/** One node per roster agent using their primary skill: brief -> everyone in parallel -> approve. */
+function allHandsNodes(): PlanDraftNode[] {
+  const pin = (id: string, dependsOn: string[]): PlanDraftNode => {
+    const a = ROSTER.find((r) => r.id === id)!;
+    return { ...node(`all_${id}`, a.skills[0], dependsOn), title: `${title(a.skills[0])} · ${a.name}`, assigneeId: id };
+  };
+  const first = pin(ALL_HANDS_FIRST, []);
+  const middle = ROSTER.filter((a) => a.id !== ALL_HANDS_FIRST && a.id !== ALL_HANDS_LAST).map((a) => pin(a.id, [first.key]));
+  return [first, ...middle, pin(ALL_HANDS_LAST, middle.map((n) => n.key))];
+}
+
 // strong depts (score >= 3), highest score first, ties in declaration order
 function strongDepts(text: string): DeptId[] {
   const s = scoreDepartments(text);
@@ -126,6 +143,7 @@ function resolveDef(dept: DeptId, t: string): IntentDef {
 export function detectIntent(text: string): Intent | null {
   const t = norm(text);
   if (!t) return null;
+  if (ALL_HANDS_TRIGGERS.some((k) => has(t, k))) return 'all_hands';
   if (NEW_GAME_TRIGGERS.some((k) => has(t, k))) return 'new_game';
   const d = strongDepts(t)[0];
   return d ? resolveDef(d, t).intent : null;
@@ -137,6 +155,7 @@ function leaves(nodes: PlanDraftNode[]): string[] {
 }
 
 function buildNodes(intent: Intent, t: string): PlanDraftNode[] {
+  if (intent === 'all_hands') return allHandsNodes();
   if (intent === 'new_game') return NEW_GAME_NODES.map((n) => ({ ...n, dependsOn: [...n.dependsOn] }));
   const strong = strongDepts(t);
   const def = resolveDef(strong[0], t);
@@ -183,6 +202,7 @@ export function makePlan(text: string): PlanResult {
     parallel > 0 ? `มี ${parallel} งานที่ทำขนานกันได้` : 'งานต่อกันเป็นลำดับ',
     'กำลังหาคนที่เหมาะสมกับแต่ละงาน',
   ];
+  if (intent === 'all_hands') reasoning.splice(2, 0, `เรียกทุกคน ${nodes.length} คนมาทำงานพร้อมกัน`);
   const lines = nodes.map((n, i) => `${i + 1}. ${n.title} (${n.skill})`);
   return { intent, nodes, reasoning, reply: `รับทราบค่ะ แผนงานมี ${nodes.length} ขั้นตอน:\n${lines.join('\n')}` };
 }

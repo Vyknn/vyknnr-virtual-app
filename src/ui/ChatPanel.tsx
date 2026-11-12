@@ -1,7 +1,8 @@
 'use client';
 
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ROSTER } from '@/core/roster';
+import { ALL_SUGGESTIONS, matchSuggestions } from '@/core/commandSuggestions';
 import type { AgentDef, ChatMessage, Deliverable } from '@/core/types';
 import { useOfficeStore } from '@/store/useOfficeStore';
 import { glass, label, monoChip, simClock } from './glass';
@@ -116,29 +117,85 @@ const Message = memo(function Message({ m }: { m: ChatMessage }) {
   );
 });
 
-function Composer() {
-  const [text, setText] = useState('');
+function Composer({ text, setText, inputRef }: {
+  text: string;
+  setText: (t: string) => void;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+}) {
   const submit = useOfficeStore((s) => s.submit);
+  const [active, setActive] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
+  const matches = useMemo(() => matchSuggestions(text), [text]);
+  const open = !dismissed && matches.length > 0;
+  const idx = Math.min(active, matches.length - 1);
+
   const send = () => {
     const t = text.trim();
     if (!t) return;
     submit(t);
     setText('');
   };
+  const choose = (s: string) => {
+    setText(s);
+    setDismissed(true);
+    const el = inputRef.current;
+    if (el) { el.focus(); requestAnimationFrame(() => el.setSelectionRange(s.length, s.length)); }
+  };
+
   return (
     <form
-      className="flex items-end gap-2 border-t border-slate-200/70 p-2.5"
+      className="relative flex items-end gap-2 border-t border-slate-200/70 p-2.5"
       onSubmit={(e) => { e.preventDefault(); send(); }}
     >
+      {open && (
+        <ul
+          id="cmd-autocomplete"
+          role="listbox"
+          className="absolute inset-x-2.5 bottom-full mb-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+        >
+          {matches.map((s, i) => (
+            <li
+              key={s}
+              id={`cmd-opt-${i}`}
+              role="option"
+              aria-selected={i === idx}
+              // mousedown + preventDefault keeps focus in the textarea (click would blur first)
+              onMouseDown={(e) => { e.preventDefault(); choose(s); }}
+              onMouseEnter={() => setActive(i)}
+              className={`cursor-pointer truncate rounded-lg px-2.5 py-1.5 font-mono text-xs ${
+                i === idx ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+              }`}
+            >
+              {s}
+            </li>
+          ))}
+          <li className="px-2.5 pt-1 text-[10px] text-slate-400" aria-hidden>↑↓ เลือก · Tab/Enter ใส่ · Esc ปิด</li>
+        </ul>
+      )}
       <textarea
+        ref={inputRef}
         value={text}
         rows={2}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => { setText(e.target.value); setActive(0); setDismissed(false); }}
+        onBlur={() => setDismissed(true)}
+        onFocus={() => setDismissed(false)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
+          if (e.nativeEvent.isComposing) return;
+          if (open) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setActive((idx + 1) % matches.length); return; }
+            if (e.key === 'ArrowUp') { e.preventDefault(); setActive((idx - 1 + matches.length) % matches.length); return; }
+            if (e.key === 'Escape') { e.preventDefault(); setDismissed(true); return; }
+            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); choose(matches[idx]); return; }
+          }
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
         }}
         placeholder={PLACEHOLDER}
         aria-label="Command to AI Core"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls="cmd-autocomplete"
+        aria-autocomplete="list"
+        aria-activedescendant={open ? `cmd-opt-${idx}` : undefined}
         className="min-h-[2.5rem] flex-1 resize-none rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
       />
       <button
@@ -159,6 +216,13 @@ function Composer() {
 export default function ChatPanel({ className = '' }: { className?: string }) {
   const chat = useOfficeStore((s) => s.sim.chat);
   const scroller = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const [draft, setDraft] = useState('');
+  const fill = (s: string) => {
+    setDraft(s);
+    const el = input.current;
+    if (el) { el.focus(); requestAnimationFrame(() => el.setSelectionRange(s.length, s.length)); }
+  };
   useEffect(() => {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -175,14 +239,24 @@ export default function ChatPanel({ className = '' }: { className?: string }) {
         {chat.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white/50 p-3 text-xs text-slate-500">
             ยังไม่มีงาน ลองพิมพ์คำสั่ง เช่น
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {['ทำเกมใหม่แนว puzzle', 'ทำ API login', 'ทำโลโก้'].map((s) => <span key={s} className={monoChip}>{s}</span>)}
+            <div className="mt-1.5 flex max-h-48 flex-wrap gap-1 overflow-y-auto">
+              {ALL_SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => fill(s)}
+                  title="คลิกเพื่อใส่ในช่องพิมพ์"
+                  className={`${monoChip} cursor-pointer transition hover:bg-blue-50 hover:text-blue-700`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
           </div>
         )}
         {chat.map((m) => <Message key={m.id} m={m} />)}
       </div>
-      <Composer />
+      <Composer text={draft} setText={setDraft} inputRef={input} />
     </section>
   );
 }

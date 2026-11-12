@@ -1,5 +1,7 @@
 'use client';
 
+import './threeConsole'; // must run before <Canvas> creates its store (see file)
+
 import { Suspense, useEffect, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
@@ -86,7 +88,8 @@ export interface OfficeSceneProps {
 export default function OfficeScene({ children }: OfficeSceneProps) {
   return (
     <Canvas
-      shadows
+      // `shadows` alone picks PCFSoftShadowMap, which three r18x removed (falls back with a console warning).
+      shadows="percentage"
       onPointerMissed={() => useOfficeStore.getState().select(null)}
       dpr={[1, 1.75]}
       gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}

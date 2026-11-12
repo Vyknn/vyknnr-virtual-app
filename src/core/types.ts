@@ -13,7 +13,9 @@ export type NodeStatus = 'blocked'|'ready'|'queued'|'running'|'done';
 export interface AgentStep { kind: 'thinking'|'tool_call'|'tool_result'|'output'; text: string; tool?: string; args?: Record<string,string>; at: number; duration: number }
 export interface TaskNode { id: string; jobId: string; title: string; skill: SkillId; assigneeId: string;
   dependsOn: string[]; status: NodeStatus; workplace: 'desk'|'rack'; steps: AgentStep[]; stepIndex: number;
-  stepElapsed: number; inputs: string[]; output: Deliverable | null }
+  stepElapsed: number; inputs: string[]; output: Deliverable | null;
+  /** Assignee fixed by the plan (e.g. all-hands); dispatch never reassigns it. */
+  pinned?: boolean }
 export type Deliverable = { kind: 'code'; files: string[]; snippet: string } | { kind: 'image'; title: string; palette: string[] }
   | { kind: 'numbers'; rows: [string, string][] } | { kind: 'text'; text: string };
 export interface Job { id: string; command: string; color: string; status: 'planning'|'running'|'done';
