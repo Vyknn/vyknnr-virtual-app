@@ -60,7 +60,7 @@ function Racks() {
     acc.current += delta * (1.5 + level.current * 10);
     const map = m.map;
     if (acc.current >= 1 && map) { acc.current %= 1; map.offset.y = (map.offset.y + 1 / 48) % 1; }
-    const intensity = 0.9 + level.current * 2.6;
+    const intensity = 1.15 + level.current * 2.4;
     m.color.setRGB(intensity, intensity, intensity);
   });
 
@@ -213,7 +213,7 @@ export default function ServerRoom() {
       <AisleAndTrays />
       <Conduits />
       {/* cool fill light inside the server room */}
-      <pointLight position={[sx, 2.6, sz]} color="#67e8f9" intensity={8} distance={12} decay={1.6} />
+      <pointLight position={[sx, 2.6, sz]} color="#67e8f9" intensity={2} distance={12} decay={1.6} />
     </group>
   );
 }

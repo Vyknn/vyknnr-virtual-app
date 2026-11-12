@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, type ReactNode } from 'react';
+import { Suspense, useEffect, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
@@ -17,34 +17,49 @@ import ServerRoom from './ServerRoom';
 import Lounge from './Lounge';
 import AICore from './AICore';
 
+/*
+ * Exposure budget for bloom (luminanceThreshold = 1.0):
+ * the bloom pass runs on the linear HDR buffer before tone mapping, so any lit surface whose
+ * linear radiance reaches 1.0 would bloom and wash the bright scene out. three's physical lights give
+ * diffuse = intensity · cosθ · albedo / π, so a near-white surface (albedo ~0.9) facing up gets about
+ *   sun 2.0 · 0.8 · 0.9 / π ≈ 0.46  +  hemisphere 0.8 · 0.9 / π ≈ 0.23  +  env 0.25 · ~0.9 ≈ 0.2   ≈ 0.89 < 1.0.
+ * Local point lights (core / server room / lounge) are kept weak so they add only ~0.1–0.2 nearby.
+ * Only emissive / basic materials with toneMapped={false} and color > 1 (see `glow()`) exceed the threshold.
+ * (Estimate from the shading model, not measured on screen.)
+ */
+const ENV_INTENSITY = 0.25;
+const HEMI_INTENSITY = 0.8;
+const SUN_INTENSITY = 2.0;
+
 /** Procedural studio reflections (no HDR download): PMREM of three's RoomEnvironment. */
 function StudioEnvironment() {
   const gl = useThree((s) => s.gl);
   const get = useThree((s) => s.get);
-  const env = useMemo(() => {
+  // Create + dispose in the same effect so StrictMode's mount/unmount/mount never reuses a disposed target.
+  useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
     const room = new RoomEnvironment();
     const rt = pmrem.fromScene(room, 0.04);
     room.dispose?.();
     pmrem.dispose();
-    return rt;
-  }, [gl]);
-  useEffect(() => {
     const scene = get().scene;
-    scene.environment = env.texture;
-    scene.environmentIntensity = 0.55;
-    return () => { scene.environment = null; env.dispose(); };
-  }, [get, env]);
+    scene.environment = rt.texture;
+    scene.environmentIntensity = ENV_INTENSITY;
+    return () => {
+      if (scene.environment === rt.texture) scene.environment = null;
+      rt.dispose();
+    };
+  }, [gl, get]);
   return null;
 }
 
 function Lights() {
   return (
     <>
-      <hemisphereLight args={['#ffffff', '#c3cede', 0.9]} />
+      <hemisphereLight args={['#ffffff', '#c3cede', HEMI_INTENSITY]} />
       <directionalLight
         position={[-18, 30, 14]}
-        intensity={1.6}
+        intensity={SUN_INTENSITY}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0005}
@@ -89,11 +104,11 @@ export default function OfficeScene({ children }: OfficeSceneProps) {
         {children}
       </Suspense>
       <EffectComposer multisampling={4}>
-        <Bloom mipmapBlur luminanceThreshold={0.9} luminanceSmoothing={0.1} intensity={0.9} radius={0.7} />
+        <Bloom mipmapBlur luminanceThreshold={1.0} luminanceSmoothing={0.1} intensity={0.9} radius={0.7} />
         {/* EffectComposer forces renderer.toneMapping = NoToneMapping; tone-map once at the end instead. */}
         <ToneMapping mode={ToneMappingMode.NEUTRAL} />
       </EffectComposer>
-      {process.env.NODE_ENV === 'development' && <Stats className="pf-stats" />}
+      {process.env.NODE_ENV === 'development' && <Stats />}
     </Canvas>
   );
 }

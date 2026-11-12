@@ -81,7 +81,7 @@ function HoloSign({ zone }: { zone: Zone }) {
       <Billboard ref={ref} position={[0, y, 0]} lockX lockZ>
         <mesh>
           <planeGeometry args={[h * aspect, h]} />
-          <meshBasicMaterial map={texture} transparent depthWrite={false} toneMapped={false} color={glow('#ffffff', 1.15)} side={THREE.DoubleSide} />
+          <meshBasicMaterial map={texture} transparent depthWrite={false} toneMapped={false} color="#ffffff" side={THREE.DoubleSide} />
         </mesh>
       </Billboard>
     </group>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { OFFICE } from '@/core/office';
 import { HALF_D, HALF_W } from './coords';
@@ -47,6 +47,7 @@ export default function Floor() {
     t.repeat.set(OFFICE.width, OFFICE.depth);
     return t;
   }, []);
+  useEffect(() => () => floorTex.dispose(), [floorTex]);
 
   const { solid, glass, solidTrim, glassTrim, glassFrames } = useMemo(() => {
     const solid: WallBox[] = [], glass: WallBox[] = [], solidTrim: WallBox[] = [], glassTrim: WallBox[] = [], glassFrames: WallBox[] = [];

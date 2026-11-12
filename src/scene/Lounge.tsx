@@ -145,7 +145,7 @@ export default function Lounge() {
       })}
 
       {/* Warm lounge fill */}
-      <pointLight position={rc(31, 17, 11, 12, 3)} color="#fde68a" intensity={6} distance={14} decay={1.6} />
+      <pointLight position={rc(31, 17, 11, 12, 3)} color="#fde68a" intensity={1.5} distance={14} decay={1.6} />
       <MeetingAndCeo />
     </group>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { OFFICE } from '@/core/office';
@@ -42,20 +42,20 @@ function curvedScreenGeometry(inset = 0): THREE.BufferGeometry {
   return g;
 }
 
-function InstancedPart({ part, children, onMesh }: { part: Part; children: React.ReactNode; onMesh?: (m: THREE.InstancedMesh) => void }) {
+function InstancedPart({ part, children, meshRef }: { part: Part; children: React.ReactNode; meshRef?: React.RefObject<THREE.InstancedMesh | null> }) {
   const n = OFFICE.desks.length;
+  const own = useRef<THREE.InstancedMesh>(null);
+  const ref = meshRef ?? own;
+  // Matrices written once per mount (not per render), so per-frame updates (holo panel) are never reset.
+  useLayoutEffect(() => {
+    const m = ref.current;
+    if (!m) return;
+    const tmp = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) m.setMatrixAt(i, tmp.multiplyMatrices(deskWorld(i), part.local));
+    m.instanceMatrix.needsUpdate = true;
+  }, [ref, part, n]);
   return (
-    <instancedMesh
-      args={[part.geo, undefined, n]}
-      frustumCulled={false}
-      ref={(m) => {
-        if (!m) return;
-        const tmp = new THREE.Matrix4();
-        for (let i = 0; i < n; i++) m.setMatrixAt(i, tmp.multiplyMatrices(deskWorld(i), part.local));
-        m.instanceMatrix.needsUpdate = true;
-        onMesh?.(m);
-      }}
-    >
+    <instancedMesh args={[part.geo, undefined, n]} frustumCulled={false} ref={ref}>
       {children}
     </instancedMesh>
   );
@@ -82,7 +82,7 @@ export default function Desks() {
 
   const screenRef = useRef<THREE.InstancedMesh | null>(null);
   const holoRef = useRef<THREE.InstancedMesh | null>(null);
-  const working = useRef<boolean[]>(OFFICE.desks.map(() => true)); // forces first update
+  const working = useRef<(boolean | null)[]>(OFFICE.desks.map(() => null)); // null: first frame always writes colors
   const holoBase = useMemo(() => OFFICE.desks.map((_, i) => new THREE.Matrix4().multiplyMatrices(deskWorld(i), parts.holo.local)), [parts]);
   const tmp = useMemo(() => ({ m: new THREE.Matrix4(), s: new THREE.Matrix4(), c: new THREE.Color() }), []);
 
@@ -131,7 +131,7 @@ export default function Desks() {
       <InstancedPart part={parts.bezel}>
         <meshStandardMaterial color={PALETTE.graphite} roughness={0.35} metalness={0.5} side={THREE.DoubleSide} />
       </InstancedPart>
-      <InstancedPart part={parts.screen} onMesh={(m) => { screenRef.current = m; }}>
+      <InstancedPart part={parts.screen} meshRef={screenRef}>
         <meshBasicMaterial color="#ffffff" toneMapped={false} side={THREE.BackSide} />
       </InstancedPart>
       <InstancedPart part={parts.chairSeat}>
@@ -143,7 +143,7 @@ export default function Desks() {
       <InstancedPart part={parts.chairBase}>
         <meshStandardMaterial color={PALETTE.deskLeg} roughness={0.3} metalness={0.7} />
       </InstancedPart>
-      <InstancedPart part={parts.holo} onMesh={(m) => { holoRef.current = m; }}>
+      <InstancedPart part={parts.holo} meshRef={holoRef}>
         <meshBasicMaterial color="#ffffff" transparent opacity={0.45} toneMapped={false} depthWrite={false} side={THREE.DoubleSide} />
       </InstancedPart>
     </group>

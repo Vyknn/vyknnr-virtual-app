@@ -67,15 +67,6 @@ export default function IsoCamera() {
     return () => { unsubFocus(); unsubSel(); };
   }, []);
 
-  // User drag cancels a running focus tween.
-  useEffect(() => {
-    const c = controls.current;
-    if (!c) return;
-    const onStart = () => { focusGoal.current = null; };
-    c.addEventListener('start', onStart);
-    return () => c.removeEventListener('start', onStart);
-  }, []);
-
   useFrame(({ camera }, delta) => {
     const c = controls.current;
     if (!c) return;
@@ -130,6 +121,7 @@ export default function IsoCamera() {
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         zoomSpeed={1.2}
+        onStart={() => { focusGoal.current = null; }} // user drag/zoom cancels a running focus tween
       />
     </>
   );

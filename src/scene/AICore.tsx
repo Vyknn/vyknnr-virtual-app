@@ -55,7 +55,7 @@ export default function AICore() {
     if (ringMat.current) ringMat.current.color.copy(cur).multiplyScalar(1.6 + pulse * p.amp * 2);
     if (light.current) {
       light.current.color.copy(cur);
-      light.current.intensity = 10 + pulse * p.amp * 25;
+      light.current.intensity = 1.5 + pulse * p.amp * 3; // weak: keep lit surfaces < bloom threshold
     }
   });
 
@@ -64,7 +64,7 @@ export default function AICore() {
       {/* pedestal */}
       <mesh position={[0, 0.15, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[1.2, 1.4, 0.3, 40]} />
-        <meshStandardMaterial color="#f1f5f9" roughness={0.15} metalness={0.3} />
+        <meshStandardMaterial color="#cbd5e1" roughness={0.15} metalness={0.3} />
       </mesh>
       <mesh position={[0, 0.31, 0]}>
         <torusGeometry args={[1.12, 0.03, 8, 64]} />
@@ -99,7 +99,7 @@ export default function AICore() {
           <meshBasicMaterial color={glow(PALETTE.violet, 2.4)} toneMapped={false} />
         </mesh>
       </group>
-      <pointLight ref={light} position={[0, CORE_HEIGHT, 0]} color={PALETTE.cyan} intensity={12} distance={10} decay={1.5} />
+      <pointLight ref={light} position={[0, CORE_HEIGHT, 0]} color={PALETTE.cyan} intensity={2} distance={8} decay={1.5} />
       <Sparkles count={40} scale={[2.6, 2.4, 2.6]} position={[0, 1.8, 0]} size={2.5} speed={0.35} color="#a5f3fc" opacity={0.8} />
     </group>
   );
